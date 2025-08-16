@@ -1,0 +1,61 @@
+# ----------------------------------
+# Line ending normalization
+# ----------------------------------
+# Always use LF for Python & shell scripts
+*.py text eol=lf
+*.sh text eol=lf
+
+# Enforce LF for configs
+*.yaml text eol=lf
+*.yml  text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+
+# ----------------------------------
+# OS-specific files
+# ----------------------------------
+# Ignore diff for binary system junk
+.DS_Store binary
+Thumbs.db binary
+
+# ----------------------------------
+# Jupyter notebooks
+# ----------------------------------
+*.ipynb text eol=lf
+
+# ----------------------------------
+# Common data formats
+# ----------------------------------
+*.csv text
+*.tsv text
+*.sql text eol=lf
+
+# ----------------------------------
+# Documentation
+# ----------------------------------
+*.md text
+*.rst text
+*.txt text
+
+# ----------------------------------
+# Binary files (no diff)
+# ----------------------------------
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.pkl binary
+*.db binary
+*.sqlite binary
+*.zip binary
+*.tar binary
+*.gz binary
+
+# ----------------------------------
+# Lockfiles (no CRLF conversion)
+# ----------------------------------
+package-lock.json -text
+poetry.lock -text
+Pipfile.lock -text
