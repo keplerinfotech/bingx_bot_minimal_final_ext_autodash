@@ -1,0 +1,62 @@
+# -----------------------
+# OS / System junk files
+# -----------------------
+.DS_Store
+Thumbs.db
+
+# -----------------------
+# Python cache & compiled files
+# -----------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pkl
+*.log
+
+# -----------------------
+# Virtual Environments
+# -----------------------
+venv/
+.venv/
+env/
+ENV/
+*.env
+
+# -----------------------
+# PyCharm / IDE
+# -----------------------
+.idea/
+.vscode/
+
+# -----------------------
+# Jupyter / Research
+# -----------------------
+*.ipynb_checkpoints
+notebooks/
+research/__pycache__/
+
+# -----------------------
+# Project-specific ignores
+# -----------------------
+# Backtest / replay output
+replay/__pycache__/
+backtests/
+results/
+logs/
+*.csv
+*.xlsx
+
+# Datasets / large temp files
+data/
+datasets/
+*.db
+*.sqlite
+
+# -----------------------
+# AWS / Deployment
+# -----------------------
+*.pem
+*.key
+.secrets/
+config.json
