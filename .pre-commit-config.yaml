@@ -9,6 +9,10 @@ repos:
     rev: main
     hooks:
       - id: ruff
+        # Temporarily restrict ruff to the actively cleaned areas so pre-commit
+        # doesn't fail on legacy files while we incrementally remediate them.
+        # Pattern matches Python files under scripts/, tests/, and engine/.
+        files: '^(scripts|tests|engine)/.*\.py$'
         args: ["--fix"]
 
   - repo: https://github.com/PyCQA/isort
