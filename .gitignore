@@ -13,6 +13,7 @@ __pycache__/
 *.pyd
 *.pkl
 *.log
+*.pyc
 
 # -----------------------
 # Virtual Environments
@@ -60,3 +61,23 @@ datasets/
 *.key
 .secrets/
 config.json
+
+# Byte-compiled / cache
+__pycache__/
+*.pyc
+
+# Virtual env
+venv/
+
+# Logs and reports
+logs/
+reports/
+
+# Local env file
+.env
+
+# Secrets/config
+config/settings.yaml
+
+# IDE
+.idea/

@@ -1,46 +1,15 @@
-"""
-Final demo script: multi-venue L2 replay + router + latency + scoring.
-- Synthesizes 3 venue datasets with different liquidity profiles and latency.
-- Detects sweeps and creates limit orders.
-- Routes each order to a venue and simulates latency-adjusted submission.
-- Collects fill records and writes a CSV + HTML dashboard.
-
-CLI flags:
-  --output-dir   Directory for outputs (CSV + HTML dashboard). Default: reports
-  --lookback     Sweep detector lookback (overrides settings/env)
-  --wick-ratio   Sweep detector wick ratio (overrides settings/env)
-  --vol-burst-z  Sweep detector volume burst Z-score (overrides settings/env)
-"""
+# python
 from __future__ import annotations
 
 import os
-import json
+import pandas as pd
+import numpy as np
 from typing import Tuple, List, Dict, Any
 
-import numpy as np
-import pandas as pd
-
-# Project imports
 from multi_venue import Venue, Router, LatencyModel
 from replay.l2_replayer import L2Replay  # noqa: F401
 from replay.execution_l2 import ExecutionSimulatorL2  # noqa: F401
 from research.detectors import find_sweeps
-
-# Try to import a dashboard builder (prefer dashboard_builder, fall back to dashboard)
-build_dashboard = None
-try:
-    from dashboard_builder import build_dashboard  # type: ignore
-except Exception:
-    try:
-        from dashboard import build_dashboard  # type: ignore
-    except Exception:
-        build_dashboard = None
-
-# Optional YAML config loader for SMC sweep parameters
-try:
-    import yaml  # type: ignore
-except Exception:
-    yaml = None
 
 
 def synthesize_venue(
@@ -51,15 +20,13 @@ def synthesize_venue(
     latency_base: float = 20.0,
 ) -> Tuple[Venue, LatencyModel]:
     rng = np.random.default_rng(seed)
-    # Use 'min' (minute) frequency to avoid deprecation warnings
-    idx = pd.date_range("2024-01-01", periods=n, freq="min")
+    idx = pd.date_range("2024-01-01", periods=n, freq="T")
     price = 100 + np.cumsum(rng.normal(0, 0.05, n))
 
     l2_rows: List[Dict[str, Any]] = []
     trades_rows: List[Dict[str, Any]] = []
     for i, t in enumerate(idx):
         center = float(price[i])
-        # Five levels on each side
         for lvl in range(1, 6):
             bp = round(center - 0.01 * lvl, 2)
             ap = round(center + 0.01 * lvl, 2)
@@ -68,7 +35,6 @@ def synthesize_venue(
             l2_rows.append({"timestamp": t, "side": "bid", "price": bp, "size": bs, "update_type": "snapshot"})
             l2_rows.append({"timestamp": t, "side": "ask", "price": ap, "size": asz, "update_type": "snapshot"})
 
-        # Aggressive prints
         ntr = int(rng.integers(0, 4)) if liquidity_scale < 2.0 else int(rng.integers(1, 6))
         for _ in range(ntr):
             side = "buy" if rng.random() < 0.5 else "sell"
@@ -83,59 +49,9 @@ def synthesize_venue(
 
 
 def run_final_replay(output_csv: str | None = None, output_dir: str = "reports") -> str:
-    """
-    Run multi-venue replay + routing; write CSV and HTML dashboard.
-
-    Returns:
-        Path to the generated CSV file.
-    """
-    # Prepare output directory
     os.makedirs(output_dir, exist_ok=True)
     out_csv = output_csv or os.path.join(output_dir, "final_fill_quality_report.csv")
 
-    # Helper: load sweep detector params from settings.yaml (env SMC_SETTINGS_PATH overrides)
-    def _load_smc_params() -> Dict[str, Any]:
-        defaults = {"sweep_lookback": 20, "wick_ratio": 0.5, "vol_burst_z": 1.5}
-        settings_path = os.environ.get("SMC_SETTINGS_PATH") or os.path.join("config", "settings.yaml")
-        cfg_vals = defaults.copy()
-        if yaml is not None:
-            try:
-                if os.path.exists(settings_path):
-                    with open(settings_path, "r", encoding="utf-8") as f:
-                        cfg = yaml.safe_load(f) or {}
-                    smc = (cfg or {}).get("smc", {})
-                    cfg_vals.update(
-                        {
-                            "sweep_lookback": int(smc.get("sweep_lookback", cfg_vals["sweep_lookback"])),
-                            "wick_ratio": float(smc.get("wick_ratio", cfg_vals["wick_ratio"])),
-                            "vol_burst_z": float(smc.get("vol_burst_z", cfg_vals["vol_burst_z"])),
-                        }
-                    )
-            except Exception:
-                # fall back to defaults if parsing fails
-                pass
-        # Env var overrides (set by CLI in __main__)
-        env_lookback = os.environ.get("SMC_SWEEP_LOOKBACK")
-        env_wick = os.environ.get("SMC_WICK_RATIO")
-        env_z = os.environ.get("SMC_VOL_BURST_Z")
-        if env_lookback:
-            try:
-                cfg_vals["sweep_lookback"] = int(env_lookback)
-            except Exception:
-                pass
-        if env_wick:
-            try:
-                cfg_vals["wick_ratio"] = float(env_wick)
-            except Exception:
-                pass
-        if env_z:
-            try:
-                cfg_vals["vol_burst_z"] = float(env_z)
-            except Exception:
-                pass
-        return cfg_vals
-
-    # Create 3 venues and router
     v1, lat1 = synthesize_venue("alpha", n=2000, seed=11, liquidity_scale=1.0, latency_base=20.0)
     v2, lat2 = synthesize_venue("beta", n=2000, seed=22, liquidity_scale=2.5, latency_base=50.0)
     v3, lat3 = synthesize_venue("gamma", n=2000, seed=33, liquidity_scale=0.6, latency_base=10.0)
@@ -143,21 +59,19 @@ def run_final_replay(output_csv: str | None = None, output_dir: str = "reports")
     latency_models = {"alpha": lat1, "beta": lat2, "gamma": lat3}
     router = Router(venues, latency_models=latency_models)
 
-    # Build LTF bar df used by sweep detector (use venue alpha price for bars)
-    # Use '1min' to avoid deprecation
-    alpha_px = v1.trades["price"].resample("1min").last().ffill().bfill()
+    alpha_px = v1.trades["price"].resample("1T").last().ffill().bfill()
 
-    df_bars = pd.DataFrame(index=alpha_px.index)
-    df_bars["close"] = alpha_px
-    df_bars["open"] = df_bars["close"].shift(1).fillna(df_bars["close"])
-    df_bars["high"] = df_bars[["open", "close"]].max(axis=1) + 0.05
-    df_bars["low"] = df_bars[["open", "close"]].min(axis=1) - 0.05
-    df_bars["volume"] = 1.0
+    df = pd.DataFrame(index=alpha_px.index)
+    df["close"] = alpha_px
+    df["open"] = df["close"].shift(1).fillna(df["close"])
+    df["high"] = df[["open", "close"]].max(axis=1) + 0.05
+    df["low"] = df[["open", "close"]].min(axis=1) - 0.05
+    df["volume"] = 1.0
 
-    # Detect sweep events
+    # Detect sweep events (df is defined above)
     smc_params = _load_smc_params()
     events = find_sweeps(
-        df_bars,
+        df,
         lookback=int(smc_params["sweep_lookback"]),
         wick_ratio=float(smc_params["wick_ratio"]),
         vol_burst_z=float(smc_params["vol_burst_z"]),
@@ -169,11 +83,9 @@ def run_final_replay(output_csv: str | None = None, output_dir: str = "reports")
     for ts, ev in events.iterrows():
         direction = ev.get("direction", "long")
         side = "long" if direction == "long" else "short"
-        price = float(ev.get("entry_price", df_bars.loc[ts, "close"])) if "entry_price" in ev else float(
-            df_bars.loc[ts, "close"]
-        )
+        price = float(ev.get("entry_price", df.loc[ts, "close"]))
         qty = float(ev.get("qty", 1.0))
-        oid = f"e-{int(pd.Timestamp(ts).value // 1_000_000)}"  # stable ID in ms
+        oid = f"e-{int(pd.Timestamp(ts).value // 1_000_000)}"
         orders.append({"id": oid, "timestamp": pd.Timestamp(ts), "side": side, "price": price, "qty": qty})
 
     # Route & place orders (use per-venue exec_sim to avoid unsupported constructor args)
@@ -187,7 +99,7 @@ def run_final_replay(output_csv: str | None = None, output_dir: str = "reports")
         venue_name, prob = router.choose(ts, side, price, qty, horizon_ms=60_000)
         venue = next(v for v in venues if v.name == venue_name)
 
-        # Simulate submission latency
+        # Simulate latency on submission
         lat_ms = float(latency_models[venue_name].sample_ms())
         ts_submit = ts + pd.Timedelta(milliseconds=lat_ms)
 
@@ -246,7 +158,7 @@ def run_final_replay(output_csv: str | None = None, output_dir: str = "reports")
     try:
         dash_path = os.path.join(output_dir, "dashboard.html")
         if build_dashboard is not None:
-            build_dashboard(out_csv, dash_path)  # type: ignore[operator]
+            build_dashboard(out_csv, dash_path)
             print(f"Dashboard generated: {dash_path}")
         else:
             # Minimal inline dashboard if builder is not available

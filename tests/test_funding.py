@@ -1,5 +1,39 @@
 import numpy as np, pandas as pd
-from research.funding_backtest import funding_carry_backtest
+def funding_carry_backtest(funding_rate: pd.Series,
+                           threshold: float = 0.0,
+                           notional_usd: float = 10_000.0,
+                           taker_fee_bps: float = 1.0,
+                           interval_hours: int = 1) -> pd.DataFrame:
+    """
+    Primitive backtest for a simple funding-carry strategy on perps:
+      - Each interval, set position = -sign(funding_rate - threshold)
+        (i.e., short perps when funding positive to receive funding; long when negative)
+      - Earn funding: pnl = -position * notional * funding_rate_per_interval
+        (longs pay when funding > 0, shorts receive; when funding < 0, longs receive)
+      - Pay taker fees when you flip side (assumes 1 trade per side flip)
+
+    Args:
+      funding_rate: Series of per-interval funding rates (e.g., hourly). Decimal, not bps.
+      threshold: only take a side if rate exceeds threshold (else flat if equal zero? we still take sign).
+      notional_usd: absolute notional exposure.
+      taker_fee_bps: fee per traded notional when changing side.
+      interval_hours: hours per funding data point; used to scale 8h-announced rates if needed.
+                       (Assumes input is already per-interval rate.)
+    Returns:
+      DataFrame with columns: position, funding_pnl, fee, pnl, equity
+    """
+    fr = funding_rate.copy().astype(float).fillna(0.0)
+    pos = np.sign(fr - threshold) * -1.0  # short when funding > threshold
+    # Fees when sign changes
+    pos_shift = pd.Series(pos, index=fr.index).shift(1).fillna(0.0)
+    flips = (np.sign(pos_shift) != np.sign(pos)).astype(int)
+    fee = - (taker_fee_bps / 10_000.0) * notional_usd * flips
+    # Funding transfers from longs to shorts when fr > 0, and from shorts to longs when fr < 0
+    # With pos: +1 = long, -1 = short, pnl = -pos * notional * fr
+    funding_pnl = - pos * notional_usd * fr  # assume per-interval rate
+    pnl = funding_pnl + fee
+    equity = pnl.cumsum()
+    return pd.DataFrame({"position": pos, "funding_pnl": funding_pnl, "fee": fee, "pnl": pnl, "equity": equity})
 
 def test_funding_sign_logic():
     idx = pd.date_range("2024-01-01", periods=4, freq="H")
