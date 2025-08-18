@@ -1,0 +1,36 @@
+# Global settings for the minimal bot scaffold
+# settings.yaml
+  binance:
+    api_key: "vWz5mRJQXBSxmkNQXzYgsytuMXJoGAnuDPkIovCMu76EBL96VJ5alkguzySyyP6m"
+    api_secret: "I4TZSCmQtp6AHl07rU4GAgFy4WRiuFFts4gGZ8O4QmS18RddezYy7HQQgkL7ITuc"
+    testnet: true
+    paper_trade: true
+    simulate_orders: true
+
+
+  logging:
+    file: logs/bingx_bot.log
+    level: INFO
+    console: true
+
+
+  risk:
+    max_daily_loss_bps: 50            # 0.50% of equity
+    cool_down_minutes: 120
+    fraction_of_kelly: 0.25           # use quarter-Kelly by default
+
+  execution:
+    protection_ticks: 2
+    post_only: true
+    reduce_only: true
+
+  smc:
+    sweep_lookback: 12
+    wick_ratio: 0.25
+    vol_burst_z: 1.2
+
+  funding:
+    threshold: 0.0                    # short perps when funding > threshold (earn funding)
+    notional_usd: 10000
+    taker_fee_bps: 1.0                # per trade, if flipping side at intervals
+    interval_hours: 1                 # expected frequency of funding_rate data

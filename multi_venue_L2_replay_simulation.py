@@ -1,5 +1,6 @@
 # ... existing code ...
 
+
 def run_final_replay(output_csv: str | None = None, output_dir: str = "reports") -> str:
     """
     Runs the final multi-venue L2 replay + routing simulation and writes a CSV report.
@@ -12,15 +13,23 @@ def run_final_replay(output_csv: str | None = None, output_dir: str = "reports")
     # Helper: load sweep detector params from settings.yaml (env SMC_SETTINGS_PATH overrides)
     def _load_smc_params() -> Dict[str, Any]:
         defaults = {"sweep_lookback": 20, "wick_ratio": 0.5, "vol_burst_z": 1.5}
-        settings_path = os.environ.get("SMC_SETTINGS_PATH") or os.path.join("config", "settings.yaml")
+        settings_path = os.environ.get("SMC_SETTINGS_PATH") or os.path.join(
+            "config", "settings.yaml"
+        )
         cfg_vals = defaults.copy()
         # ... existing code ...
         return cfg_vals
 
     # Create 3 venues and router
-    v1, lat1 = synthesize_venue("alpha", n=2000, seed=11, liquidity_scale=1.0, latency_base=20.0)
-    v2, lat2 = synthesize_venue("beta", n=2000, seed=22, liquidity_scale=2.5, latency_base=50.0)
-    v3, lat3 = synthesize_venue("gamma", n=2000, seed=33, liquidity_scale=0.6, latency_base=10.0)
+    v1, lat1 = synthesize_venue(
+        "alpha", n=2000, seed=11, liquidity_scale=1.0, latency_base=20.0
+    )
+    v2, lat2 = synthesize_venue(
+        "beta", n=2000, seed=22, liquidity_scale=2.5, latency_base=50.0
+    )
+    v3, lat3 = synthesize_venue(
+        "gamma", n=2000, seed=33, liquidity_scale=0.6, latency_base=10.0
+    )
     venues = [v1, v2, v3]
     latency_models = {"alpha": lat1, "beta": lat2, "gamma": lat3}
     router = Router(venues, latency_models=latency_models)
@@ -53,23 +62,41 @@ def run_final_replay(output_csv: str | None = None, output_dir: str = "reports")
         price = float(ev.get("entry_price", df.loc[ts, "close"]))
         qty = float(ev.get("qty", 1.0))
         oid = f"e-{int(pd.Timestamp(ts).value // 1_000_000)}"
-        orders.append({"id": oid, "timestamp": pd.Timestamp(ts), "side": side, "price": price, "qty": qty})
+        orders.append(
+            {
+                "id": oid,
+                "timestamp": pd.Timestamp(ts),
+                "side": side,
+                "price": price,
+                "qty": qty,
+            }
+        )
 
     # ... existing code ...
     print(f"Dashboard generated: {dash_path}")
 
     return out_csv
 
+
 # ... existing code ...
 if __name__ == "__main__":
     # CLI to override sweep params and output dir at runtime
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run final multi-venue L2 replay + router.")
-    parser.add_argument("--output-dir", type=str, default="reports", help="Directory for CSV and dashboard outputs.")
+    parser = argparse.ArgumentParser(
+        description="Run final multi-venue L2 replay + router."
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="reports",
+        help="Directory for CSV and dashboard outputs.",
+    )
     parser.add_argument("--lookback", type=int, help="Sweep detector lookback.")
     parser.add_argument("--wick-ratio", type=float, help="Sweep detector wick ratio.")
-    parser.add_argument("--vol-burst-z", type=float, help="Sweep detector volume burst Z-score.")
+    parser.add_argument(
+        "--vol-burst-z", type=float, help="Sweep detector volume burst Z-score."
+    )
     args = parser.parse_args()
 
     # Apply CLI overrides via environment variables checked by _load_smc_params()

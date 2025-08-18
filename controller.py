@@ -1,10 +1,10 @@
-import pandas as pd
-from engine.core import BotEngine, BotConfig
-from engine.risk import RiskManager, RiskParams
-from engine.execution import ExecutionEngine, ExecParams
+from engine.core import BotConfig, BotEngine
 from engine.data import DataSource
+from engine.execution import ExecParams, ExecutionEngine
+from engine.risk import RiskManager, RiskParams
+from replay.replayer import ExecutionSimulator, MarketReplay
 from strategies.smc_sweep import backtest_smc_sweep
-from replay.replayer import MarketReplay, ExecutionSimulator
+
 
 class Controller:
     def __init__(self, df):

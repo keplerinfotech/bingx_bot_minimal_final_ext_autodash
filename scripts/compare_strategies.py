@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
-from typing import Dict, Any, List, Tuple, Callable
+from typing import Any, Callable, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -31,7 +31,10 @@ def synth_bars(n: int = 2000, seed: int = 11) -> pd.DataFrame:
     high = np.maximum(open_, close) + rng.uniform(0.01, 0.08, n)
     low = np.minimum(open_, close) - rng.uniform(0.01, 0.08, n)
     vol = np.exp(rng.normal(9.5, 0.25, n))
-    df = pd.DataFrame({"open": open_, "high": high, "low": low, "close": close, "volume": vol}, index=idx)
+    df = pd.DataFrame(
+        {"open": open_, "high": high, "low": low, "close": close, "volume": vol},
+        index=idx,
+    )
     return df
 
 
@@ -58,7 +61,9 @@ def score_events_forward(
     events: pd.DataFrame,
     window: int,
     move_threshold: float,
-    event_direction_resolver: Callable[[pd.DataFrame, pd.Timestamp, Dict[str, Any]], str],
+    event_direction_resolver: Callable[
+        [pd.DataFrame, pd.Timestamp, Dict[str, Any]], str
+    ],
 ) -> Tuple[pd.DataFrame, float]:
     """
     Attach close_t, fut_max, fut_min, success to events and compute hit rate.
@@ -86,15 +91,29 @@ def score_events_forward(
             success = fut_max >= close_t + move_threshold
 
         rec = ev.to_dict()
-        rec.update({"direction": side, "close_t": close_t, "fut_max": fut_max, "fut_min": fut_min, "success": bool(success)})
+        rec.update(
+            {
+                "direction": side,
+                "close_t": close_t,
+                "fut_max": fut_max,
+                "fut_min": fut_min,
+                "success": bool(success),
+            }
+        )
         rows.append({"timestamp": ts, **rec})
 
     scored = pd.DataFrame(rows).set_index("timestamp") if rows else events
-    hitrate = float(scored["success"].mean()) if "success" in scored.columns and len(scored) else float("nan")
+    hitrate = (
+        float(scored["success"].mean())
+        if "success" in scored.columns and len(scored)
+        else float("nan")
+    )
     return scored, hitrate
 
 
-def tp_sl_expectancy(scored: pd.DataFrame, tp: float, sl: float) -> Tuple[int, int, int, float]:
+def tp_sl_expectancy(
+    scored: pd.DataFrame, tp: float, sl: float
+) -> Tuple[int, int, int, float]:
     """
     Compute baseline TP/SL expectancy using forward extremes:
       - wins: hit & not stop -> +tp
@@ -118,7 +137,9 @@ def tp_sl_expectancy(scored: pd.DataFrame, tp: float, sl: float) -> Tuple[int, i
     wins = (hit & ~stop).sum()
     losses = (stop & ~hit).sum()
     usable = int(wins + losses)
-    expectancy = ((int(wins) * tp) - (int(losses) * sl)) / usable if usable else float("nan")
+    expectancy = (
+        ((int(wins) * tp) - (int(losses) * sl)) / usable if usable else float("nan")
+    )
     return int(usable), int(wins), int(losses), float(expectancy)
 
 
@@ -142,17 +163,53 @@ def resolve_fvg_dir(df: pd.DataFrame, ts: pd.Timestamp, ev: Dict[str, Any]) -> s
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Compare SMC sweep vs FVG strategies with identical data & scoring.")
-    ap.add_argument("--n", type=int, default=2000, help="Number of synthetic minutes to generate.")
+    ap = argparse.ArgumentParser(
+        description="Compare SMC sweep vs FVG strategies with identical data & scoring."
+    )
+    ap.add_argument(
+        "--n", type=int, default=2000, help="Number of synthetic minutes to generate."
+    )
     ap.add_argument("--seed", type=int, default=11, help="Base RNG seed for bars.")
     ap.add_argument("--lookback", type=int, default=12, help="Sweep detector lookback.")
-    ap.add_argument("--wick-ratio", type=float, default=0.25, help="Sweep detector wick ratio.")
-    ap.add_argument("--vol-burst-z", type=float, default=1.2, help="Sweep detector volume burst Z-score.")
-    ap.add_argument("--eval-window", type=int, default=10, help="Forward window (minutes) for success scoring.")
-    ap.add_argument("--move-threshold", type=float, default=0.05, help="Price move threshold for success scoring.")
-    ap.add_argument("--tp", type=float, default=0.0015, help="Baseline TP (fractional, 0.0015 = 0.15%).")
-    ap.add_argument("--sl", type=float, default=0.0010, help="Baseline SL (fractional, 0.0010 = 0.10%).")
-    ap.add_argument("--out-csv", type=str, default="", help="Optional path to write the comparison CSV.")
+    ap.add_argument(
+        "--wick-ratio", type=float, default=0.25, help="Sweep detector wick ratio."
+    )
+    ap.add_argument(
+        "--vol-burst-z",
+        type=float,
+        default=1.2,
+        help="Sweep detector volume burst Z-score.",
+    )
+    ap.add_argument(
+        "--eval-window",
+        type=int,
+        default=10,
+        help="Forward window (minutes) for success scoring.",
+    )
+    ap.add_argument(
+        "--move-threshold",
+        type=float,
+        default=0.05,
+        help="Price move threshold for success scoring.",
+    )
+    ap.add_argument(
+        "--tp",
+        type=float,
+        default=0.0015,
+        help="Baseline TP (fractional, 0.0015 = 0.15%).",
+    )
+    ap.add_argument(
+        "--sl",
+        type=float,
+        default=0.0010,
+        help="Baseline SL (fractional, 0.0010 = 0.10%).",
+    )
+    ap.add_argument(
+        "--out-csv",
+        type=str,
+        default="",
+        help="Optional path to write the comparison CSV.",
+    )
     args = ap.parse_args()
 
     if find_sweeps is None:
@@ -172,12 +229,15 @@ def main():
     )
     sweeps_n = int(len(sweeps)) if isinstance(sweeps, pd.DataFrame) else 0
     sweeps_scored, sweeps_hitrate = score_events_forward(
-        df, sweeps if sweeps_n else pd.DataFrame(index=df.index[:0]),
+        df,
+        sweeps if sweeps_n else pd.DataFrame(index=df.index[:0]),
         window=args.eval_window,
         move_threshold=args.move_threshold,
         event_direction_resolver=resolve_sweep_dir,
     )
-    s_usable, s_wins, s_losses, s_exp = tp_sl_expectancy(sweeps_scored, args.tp, args.sl)
+    s_usable, s_wins, s_losses, s_exp = tp_sl_expectancy(
+        sweeps_scored, args.tp, args.sl
+    )
 
     # Detect FVGs (try default signature then fallback)
     try:
@@ -189,7 +249,8 @@ def main():
             fvgs = None
     fvgs_n = int(len(fvgs)) if isinstance(fvgs, pd.DataFrame) else 0
     fvgs_scored, fvgs_hitrate = score_events_forward(
-        df, fvgs if fvgs_n else pd.DataFrame(index=df.index[:0]),
+        df,
+        fvgs if fvgs_n else pd.DataFrame(index=df.index[:0]),
         window=args.eval_window,
         move_threshold=args.move_threshold,
         event_direction_resolver=resolve_fvg_dir,
@@ -225,7 +286,11 @@ def main():
     # Pretty print
     with pd.option_context("display.max_columns", None, "display.width", 120):
         print("\nComparison (same seed/data, same scoring):")
-        print(comp.to_string(formatters={"hitrate": "{:.2%}".format, "expectancy": "{:.5f}".format}))
+        print(
+            comp.to_string(
+                formatters={"hitrate": "{:.2%}".format, "expectancy": "{:.5f}".format}
+            )
+        )
 
     if args.out_csv:
         os.makedirs(os.path.dirname(args.out_csv) or ".", exist_ok=True)

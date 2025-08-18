@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+
 import pandas as pd
 
 # Try to import Plotly, but gracefully fallback if it's not available
@@ -26,7 +27,15 @@ def build_dashboard(csv_path: str, out_html: str = "dashboard.html") -> str:
         os.makedirs(out_dir, exist_ok=True)
 
     # Coerce dtypes
-    for col in ("filled", "filled_qty", "queue_ahead", "agg_consumed", "price", "qty", "route_prob"):
+    for col in (
+        "filled",
+        "filled_qty",
+        "queue_ahead",
+        "agg_consumed",
+        "price",
+        "qty",
+        "route_prob",
+    ):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
@@ -44,7 +53,16 @@ def build_dashboard(csv_path: str, out_html: str = "dashboard.html") -> str:
             .reset_index()
         )
     else:
-        summary = pd.DataFrame(columns=["venue", "filled_rate", "orders", "avg_fill_qty", "avg_queue_ahead", "avg_route_prob"])
+        summary = pd.DataFrame(
+            columns=[
+                "venue",
+                "filled_rate",
+                "orders",
+                "avg_fill_qty",
+                "avg_queue_ahead",
+                "avg_route_prob",
+            ]
+        )
 
     if px is None or go is None or make_subplots is None:
         # Minimal fallback HTML
@@ -67,14 +85,24 @@ def build_dashboard(csv_path: str, out_html: str = "dashboard.html") -> str:
     # Plotly version
     figs = []
     if len(summary):
-        fig_filled = px.bar(summary, x="venue", y="filled_rate", title="Filled Rate by Venue", text="filled_rate")
+        fig_filled = px.bar(
+            summary,
+            x="venue",
+            y="filled_rate",
+            title="Filled Rate by Venue",
+            text="filled_rate",
+        )
         fig_filled.update_layout(yaxis_tickformat=".0%")
         figs.append(fig_filled)
 
-        fig_orders = px.bar(summary, x="venue", y="orders", title="Orders by Venue", text="orders")
+        fig_orders = px.bar(
+            summary, x="venue", y="orders", title="Orders by Venue", text="orders"
+        )
         figs.append(fig_orders)
 
-        fig_prob = px.bar(summary, x="venue", y="avg_route_prob", title="Avg Route Prob by Venue")
+        fig_prob = px.bar(
+            summary, x="venue", y="avg_route_prob", title="Avg Route Prob by Venue"
+        )
         figs.append(fig_prob)
 
     dfx = df.copy()
@@ -92,11 +120,15 @@ def build_dashboard(csv_path: str, out_html: str = "dashboard.html") -> str:
     figs.append(fig_scatter)
 
     rows = len(figs)
-    fig = make_subplots(rows=rows, cols=1, subplot_titles=[f.layout.title.text for f in figs])
+    fig = make_subplots(
+        rows=rows, cols=1, subplot_titles=[f.layout.title.text for f in figs]
+    )
     for i, f in enumerate(figs, start=1):
         for tr in f.data:
             fig.add_trace(tr, row=i, col=1)
-    fig.update_layout(height=350 * rows, showlegend=True, title_text="Final Fill Quality Report")
+    fig.update_layout(
+        height=350 * rows, showlegend=True, title_text="Final Fill Quality Report"
+    )
 
     fig.write_html(out_html, include_plotlyjs="cdn")
     return out_html

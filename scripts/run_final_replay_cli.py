@@ -6,7 +6,9 @@ Usage:
 
 The wrapper ensures the project root is on sys.path so local imports resolve.
 """
+
 from __future__ import annotations
+
 import argparse
 import os
 import sys
@@ -20,14 +22,17 @@ if proj_root not in sys.path:
 try:
     # import the replay function from the project's script
     from scripts.run_final_replay import run_final_replay  # type: ignore
-except Exception as exc:  # pragma: no cover - helps debugging import issues
+except Exception:  # pragma: no cover - helps debugging import issues
     print("Failed to import run_final_replay from scripts/run_final_replay.py")
     traceback.print_exc()
     raise
 
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Run final multi-venue L2 replay (wrapper)")
-    p.add_argument("--output-dir", "-o", default="reports", help="Directory for outputs")
+    p.add_argument(
+        "--output-dir", "-o", default="reports", help="Directory for outputs"
+    )
     p.add_argument("--out-csv", default=None, help="Optional CSV path")
     args = p.parse_args()
 
@@ -36,10 +41,11 @@ def main() -> None:
     try:
         csv_path = run_final_replay(output_csv=args.out_csv, output_dir=args.output_dir)
         print(f"Replay finished, csv: {csv_path}")
-    except Exception as e:  # pragma: no cover - runtime errors should be visible to user
+    except Exception:  # pragma: no cover - runtime errors should be visible to user
         print("Replay failed with an exception:")
         traceback.print_exc()
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import difflib
 import hashlib
 import os
 import re
 import shutil
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Optional
-import ast
+from typing import Dict, List, Optional
 
-COPY_RE = re.compile(r"^(?P<base>.+?) copy(?: (?P<num>\d+))?(?P<ext>\.[A-Za-z0-9_.-]+)$")
+COPY_RE = re.compile(
+    r"^(?P<base>.+?) copy(?: (?P<num>\d+))?(?P<ext>\.[A-Za-z0-9_.-]+)$"
+)
+
 
 def sha256_of_file(path: str, chunk_size: int = 1024 * 1024) -> str:
     h = hashlib.sha256()
@@ -22,17 +25,21 @@ def sha256_of_file(path: str, chunk_size: int = 1024 * 1024) -> str:
             h.update(b)
     return h.hexdigest()
 
+
 def read_text(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
+
 
 def write_text(path: str, text: str) -> None:
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
 
+
 def ensure_dir(path: str) -> None:
     if path and not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
+
 
 def backup_file(path: str, backup_folder: Optional[str]) -> Optional[str]:
     if not backup_folder:
@@ -43,14 +50,17 @@ def backup_file(path: str, backup_folder: Optional[str]) -> Optional[str]:
     shutil.copy2(path, dst)
     return dst
 
+
 def delete_file(path: str) -> None:
     os.remove(path)
+
 
 @dataclass
 class PyTopLevel:
     name: str
     node: ast.AST
     src: str
+
 
 def extract_top_level_defs(src: str) -> Dict[str, PyTopLevel]:
     out: Dict[str, PyTopLevel] = {}
@@ -70,6 +80,7 @@ def extract_top_level_defs(src: str) -> Dict[str, PyTopLevel]:
                 chunk = ""
             out[name] = PyTopLevel(name=name, node=node, src=chunk)
     return out
+
 
 def merge_python(canonical_src: str, dupe_src: str, conflict_dir: str, label: str):
     notes: List[str] = []
@@ -95,9 +106,13 @@ def merge_python(canonical_src: str, dupe_src: str, conflict_dir: str, label: st
                         lineterm="",
                     )
                 )
-                conflict_path = os.path.join(conflict_dir, f"unknown_block_{label}_{name}.diff")
+                conflict_path = os.path.join(
+                    conflict_dir, f"unknown_block_{label}_{name}.diff"
+                )
                 write_text(conflict_path, diff)
-                notes.append(f"Could not extract exact source for '{name}'. Wrote diff to {conflict_path}.")
+                notes.append(
+                    f"Could not extract exact source for '{name}'. Wrote diff to {conflict_path}."
+                )
         else:
             c_src = canon_defs[name].src.strip()
             d_src = d.src.strip()
@@ -105,13 +120,16 @@ def merge_python(canonical_src: str, dupe_src: str, conflict_dir: str, label: st
                 ensure_dir(conflict_dir)
                 conflict_path = os.path.join(conflict_dir, f"{name}__from_{label}.py")
                 write_text(conflict_path, d.src)
-                notes.append(f"Conflict on '{name}': kept canonical; wrote variant from {label} to {conflict_path}.")
+                notes.append(
+                    f"Conflict on '{name}': kept canonical; wrote variant from {label} to {conflict_path}."
+                )
 
     if append_blocks:
         delimiter = "\n\n# --- Merged additions from duplicate file(s) ---\n"
-        merged = (merged.rstrip() + delimiter + "".join(append_blocks))
+        merged = merged.rstrip() + delimiter + "".join(append_blocks)
 
     return merged, notes
+
 
 def merge_markdown(canonical_src: str, dupe_src: str, label: str):
     notes: List[str] = []
@@ -119,9 +137,13 @@ def merge_markdown(canonical_src: str, dupe_src: str, label: str):
         return canonical_src, notes
 
     if dupe_src.startswith(canonical_src):
-        extra = dupe_src[len(canonical_src):].lstrip("\n")
+        extra = dupe_src[len(canonical_src) :].lstrip("\n")
         if extra.strip():
-            merged = canonical_src.rstrip() + f"\n\n<!-- Merged additions from {label} -->\n\n" + extra
+            merged = (
+                canonical_src.rstrip()
+                + f"\n\n<!-- Merged additions from {label} -->\n\n"
+                + extra
+            )
             notes.append(f"Appended trailing content from {label}.")
             return merged, notes
 
@@ -129,11 +151,17 @@ def merge_markdown(canonical_src: str, dupe_src: str, label: str):
     dupe_lines = dupe_src.splitlines()
     extra_lines = [ln for ln in dupe_lines if ln not in canon_lines]
     if extra_lines:
-        merged = canonical_src.rstrip() + f"\n\n<!-- Merged unique lines from {label} -->\n\n" + "\n".join(extra_lines) + "\n"
+        merged = (
+            canonical_src.rstrip()
+            + f"\n\n<!-- Merged unique lines from {label} -->\n\n"
+            + "\n".join(extra_lines)
+            + "\n"
+        )
         notes.append(f"Appended {len(extra_lines)} unique line(s) from {label}.")
         return merged, notes
 
     return canonical_src, notes
+
 
 def discover_copies(root: str = ".") -> Dict[str, List[str]]:
     groups: Dict[str, List[str]] = {}
@@ -149,7 +177,14 @@ def discover_copies(root: str = ".") -> Dict[str, List[str]]:
             groups.setdefault(canonical, []).append(dupe)
     return groups
 
-def process_group(canonical: str, duplicates: List[str], dry_run: bool, backup_folder: Optional[str], conflict_dir: str):
+
+def process_group(
+    canonical: str,
+    duplicates: List[str],
+    dry_run: bool,
+    backup_folder: Optional[str],
+    conflict_dir: str,
+):
     print(f"\n[process] Canonical target: {canonical}")
     existing_dupes = [d for d in duplicates if os.path.exists(d)]
     if not existing_dupes:
@@ -159,7 +194,10 @@ def process_group(canonical: str, duplicates: List[str], dry_run: bool, backup_f
     canon_exists = os.path.exists(canonical)
 
     if not canon_exists:
-        sorted_dupes = sorted(existing_dupes, key=lambda p: (COPY_RE.match(os.path.basename(p)).group("num") or "0"))
+        sorted_dupes = sorted(
+            existing_dupes,
+            key=lambda p: (COPY_RE.match(os.path.basename(p)).group("num") or "0"),
+        )
         promote = sorted_dupes[0]
         print(f"[promote] Canonical missing. Promoting {promote} -> {canonical}")
         if not dry_run:
@@ -184,7 +222,9 @@ def process_group(canonical: str, duplicates: List[str], dry_run: bool, backup_f
                 print(f"[dry-run] Would delete {dupe}")
             continue
 
-        print(f"[different] {label} differs from {os.path.basename(canonical)}. Attempting merge.")
+        print(
+            f"[different] {label} differs from {os.path.basename(canonical)}. Attempting merge."
+        )
         dupe_src = read_text(dupe)
         ext = os.path.splitext(canonical)[1].lower()
         merged_src = canon_src
@@ -196,7 +236,9 @@ def process_group(canonical: str, duplicates: List[str], dry_run: bool, backup_f
             merged_src, notes = merge_markdown(canon_src, dupe_src, label)
         else:
             ensure_dir(conflict_dir)
-            diff_path = os.path.join(conflict_dir, f"{os.path.basename(canonical)}__vs__{label}.diff")
+            diff_path = os.path.join(
+                conflict_dir, f"{os.path.basename(canonical)}__vs__{label}.diff"
+            )
             diff_text = "\n".join(
                 difflib.unified_diff(
                     canon_src.splitlines(),
@@ -229,12 +271,27 @@ def process_group(canonical: str, duplicates: List[str], dry_run: bool, backup_f
         else:
             print(f"[dry-run] Would delete {dupe}")
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Find, merge, and remove '* copy*' files safely.")
+    parser = argparse.ArgumentParser(
+        description="Find, merge, and remove '* copy*' files safely."
+    )
     parser.add_argument("--root", type=str, default=".", help="Project root to scan.")
-    parser.add_argument("--dry-run", action="store_true", help="Show actions without modifying files.")
-    parser.add_argument("--backup-folder", type=str, default=".dupe_backups", help="Folder to store backups.")
-    parser.add_argument("--conflict-dir", type=str, default=".merge_conflicts", help="Folder to store conflicts/diffs.")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show actions without modifying files."
+    )
+    parser.add_argument(
+        "--backup-folder",
+        type=str,
+        default=".dupe_backups",
+        help="Folder to store backups.",
+    )
+    parser.add_argument(
+        "--conflict-dir",
+        type=str,
+        default=".merge_conflicts",
+        help="Folder to store conflicts/diffs.",
+    )
     args = parser.parse_args()
 
     ensure_dir(args.backup_folder)
@@ -255,6 +312,7 @@ def main():
         )
 
     print("\nDone. Review .merge_conflicts for any items requiring manual attention.")
+
 
 if __name__ == "__main__":
     main()

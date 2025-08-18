@@ -1,7 +1,8 @@
 # python
 import os
-import json
+
 import pandas as pd
+
 
 def test_run_final_replay_outputs(tmp_path, monkeypatch):
     # Arrange: temp output and temp settings with custom SMC params
@@ -23,6 +24,7 @@ def test_run_final_replay_outputs(tmp_path, monkeypatch):
 
     # Act
     from scripts.run_final_replay import run_final_replay
+
     csv_path = run_final_replay(output_dir=str(out_dir))
 
     # Assert: CSV and dashboard exist
@@ -47,4 +49,6 @@ def test_run_final_replay_outputs(tmp_path, monkeypatch):
         "queue_ahead",
         "agg_consumed",
     }
-    assert expected_cols.issubset(set(df.columns)), f"Missing columns: {expected_cols - set(df.columns)}"
+    assert expected_cols.issubset(
+        set(df.columns)
+    ), f"Missing columns: {expected_cols - set(df.columns)}"

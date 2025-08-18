@@ -2,14 +2,13 @@
 from __future__ import annotations
 
 import argparse
+import math
 import os
 from dataclasses import dataclass
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-import math
 import numpy as np
 import pandas as pd
-import re
 
 # Optional YAML for settings (not required but kept for parity)
 try:
@@ -37,10 +36,10 @@ class EntryConfig:
     fvg_min_gap: float = 0.0  # set >0 to enforce minimum gap (price units)
     bos_lookback: int = 10
     pd_lookback: int = 20  # swing window for premium/discount calc
-    htf_minutes: int = 60   # HTF sample window for bias
+    htf_minutes: int = 60  # HTF sample window for bias
     use_killzones: bool = True
     sweep_window_minutes: int = 10  # sweep must occur within last X minutes
-    forward_minutes: int = 60       # simulation horizon
+    forward_minutes: int = 60  # simulation horizon
 
 
 @dataclass
@@ -61,7 +60,10 @@ def synth_bars(n: int = 2000, seed: int = 11) -> pd.DataFrame:
     high = np.maximum(open_, close) + rng.uniform(0.01, 0.08, n)
     low = np.minimum(open_, close) - rng.uniform(0.01, 0.08, n)
     vol = np.exp(rng.normal(9.5, 0.25, n))
-    return pd.DataFrame({"open": open_, "high": high, "low": low, "close": close, "volume": vol}, index=idx)
+    return pd.DataFrame(
+        {"open": open_, "high": high, "low": low, "close": close, "volume": vol},
+        index=idx,
+    )
 
 
 def in_killzone(ts: pd.Timestamp) -> bool:
@@ -83,7 +85,9 @@ def detect_bos_choch(df: pd.DataFrame, lookback: int) -> Tuple[pd.Series, pd.Ser
     return bull_bos.fillna(False), bear_bos.fillna(False)
 
 
-def detect_ob(df: pd.DataFrame, ts_idx: int, side: str, lookback: int = 10) -> Tuple[float, float]:
+def detect_ob(
+    df: pd.DataFrame, ts_idx: int, side: str, lookback: int = 10
+) -> Tuple[float, float]:
     """
     Simple OB detection: for long, last bearish candle body (open>close) before ts within lookback;
     for short, last bullish (close>open). Returns (ob_low, ob_high).
@@ -94,12 +98,16 @@ def detect_ob(df: pd.DataFrame, ts_idx: int, side: str, lookback: int = 10) -> T
         candidates = window[window["open"] > window["close"]]
         if len(candidates):
             ob = candidates.iloc[-1]
-            return float(min(ob["open"], ob["close"], ob["low"])), float(max(ob["open"], ob["close"], ob["high"]))
+            return float(min(ob["open"], ob["close"], ob["low"])), float(
+                max(ob["open"], ob["close"], ob["high"])
+            )
     else:
         candidates = window[window["close"] > window["open"]]
         if len(candidates):
             ob = candidates.iloc[-1]
-            return float(min(ob["open"], ob["close"], ob["low"])), float(max(ob["open"], ob["close"], ob["high"]))
+            return float(min(ob["open"], ob["close"], ob["low"])), float(
+                max(ob["open"], ob["close"], ob["high"])
+            )
     # Fallback: tiny zone around prior close
     ref = df.iloc[ts_idx - 1]["close"] if ts_idx > 0 else df.iloc[0]["close"]
     return float(ref - 0.01), float(ref + 0.01)
@@ -124,11 +132,17 @@ def premium_discount(df: pd.DataFrame, lookback: int) -> pd.Series:
 def recent_sweep_mask(df: pd.DataFrame, params: EntryConfig) -> pd.Series:
     if find_sweeps is None:
         # Fallback: large wick heuristic as proxy
-        wk_up = (df["high"] - df[["open", "close"]].max(axis=1))
-        wk_dn = (df[["open", "close"]].min(axis=1) - df["low"])
+        wk_up = df["high"] - df[["open", "close"]].max(axis=1)
+        wk_dn = df[["open", "close"]].min(axis=1) - df["low"]
         tr = (df["high"] - df["low"]).replace(0, np.nan)
-        big_wick = ((wk_up / tr >= params.wick_ratio) | (wk_dn / tr >= params.wick_ratio)).fillna(False)
-        return big_wick.rolling(params.sweep_window_minutes, min_periods=1).max().astype(bool)
+        big_wick = (
+            (wk_up / tr >= params.wick_ratio) | (wk_dn / tr >= params.wick_ratio)
+        ).fillna(False)
+        return (
+            big_wick.rolling(params.sweep_window_minutes, min_periods=1)
+            .max()
+            .astype(bool)
+        )
     try:
         ev = find_sweeps(df, lookback=params.sweep_lookback, wick_ratio=params.wick_ratio, vol_burst_z=params.vol_burst_z)  # type: ignore
     except Exception:
@@ -145,7 +159,9 @@ def recent_sweep_mask(df: pd.DataFrame, params: EntryConfig) -> pd.Series:
     return mask
 
 
-def fvg_at_bar(df: pd.DataFrame, ts: pd.Timestamp, min_gap: float = 0.0) -> Optional[Dict[str, Any]]:
+def fvg_at_bar(
+    df: pd.DataFrame, ts: pd.Timestamp, min_gap: float = 0.0
+) -> Optional[Dict[str, Any]]:
     if find_fvgs is None:
         # Fallback: displacement candle: body > median of recent bodies and gaps on one side
         i = df.index.get_indexer([ts])[0]
@@ -158,7 +174,10 @@ def fvg_at_bar(df: pd.DataFrame, ts: pd.Timestamp, min_gap: float = 0.0) -> Opti
         gap_up = (min(o2, c2) > max(o1, c1)) and (min(o3, c3) > max(o2, c2))
         gap_dn = (max(o2, c2) < min(o1, c1)) and (max(o3, c3) < min(o2, c2))
         if gap_up or gap_dn:
-            return {"direction": "long" if gap_up else "short", "mid": float((df.iloc[i]["high"] + df.iloc[i]["low"]) / 2.0)}
+            return {
+                "direction": "long" if gap_up else "short",
+                "mid": float((df.iloc[i]["high"] + df.iloc[i]["low"]) / 2.0),
+            }
         return None
     try:
         events = find_fvgs(df)  # type: ignore
@@ -177,7 +196,15 @@ def fvg_at_bar(df: pd.DataFrame, ts: pd.Timestamp, min_gap: float = 0.0) -> Opti
     return None
 
 
-def simulate_path(df: pd.DataFrame, start_idx: int, side: str, entry: float, sl: float, tp: float, horizon: int) -> Tuple[str, int, float]:
+def simulate_path(
+    df: pd.DataFrame,
+    start_idx: int,
+    side: str,
+    entry: float,
+    sl: float,
+    tp: float,
+    horizon: int,
+) -> Tuple[str, int, float]:
     """
     Iterate forward bar-by-bar up to horizon to see which is hit first: SL or TP.
     Returns (result: 'tp'/'sl'/'timeout', bars_elapsed, exit_price).
@@ -198,7 +225,11 @@ def simulate_path(df: pd.DataFrame, start_idx: int, side: str, entry: float, sl:
                 return "sl", k, sl
             if lo <= tp:
                 return "tp", k, tp
-    return "timeout", horizon, float(df.iloc[min(start_idx + horizon, len(df) - 1)]["close"])
+    return (
+        "timeout",
+        horizon,
+        float(df.iloc[min(start_idx + horizon, len(df) - 1)]["close"]),
+    )
 
 
 def evaluate(df: pd.DataFrame, econf: EntryConfig, xconf: ExitConfig) -> pd.DataFrame:
@@ -216,7 +247,9 @@ def evaluate(df: pd.DataFrame, econf: EntryConfig, xconf: ExitConfig) -> pd.Data
             continue
 
         # HTF alignment filter
-        trend = "long" if bias.iloc[i] > 0 else ("short" if bias.iloc[i] < 0 else "neutral")
+        trend = (
+            "long" if bias.iloc[i] > 0 else ("short" if bias.iloc[i] < 0 else "neutral")
+        )
         if trend == "neutral":
             continue
 
@@ -271,28 +304,55 @@ def evaluate(df: pd.DataFrame, econf: EntryConfig, xconf: ExitConfig) -> pd.Data
 
         # Simulate
         result, bars, exit_price = simulate_path(
-            df, i, side, entry=entry, sl=sl, tp=tp, horizon=min(econf.forward_minutes, xconf.max_horizon_minutes)
+            df,
+            i,
+            side,
+            entry=entry,
+            sl=sl,
+            tp=tp,
+            horizon=min(econf.forward_minutes, xconf.max_horizon_minutes),
         )
 
         # Partial at 1R handling: if full TP hit -> partial applied automatically
         # For "timeout", compute partial outcome if 1R hit along the way
         # Re-simulate 1R touch
         one_r = entry + r_denom if side == "long" else entry - r_denom
-        r_hit, _, _ = simulate_path(df, i, side, entry=entry, sl=sl, tp=one_r, horizon=min(econf.forward_minutes, xconf.max_horizon_minutes))
+        r_hit, _, _ = simulate_path(
+            df,
+            i,
+            side,
+            entry=entry,
+            sl=sl,
+            tp=one_r,
+            horizon=min(econf.forward_minutes, xconf.max_horizon_minutes),
+        )
         took_partial = r_hit == "tp"
 
         # Compute realized R with partials
         if result == "tp":
-            realized_r = xconf.partial_frac * 1.0 + (1.0 - xconf.partial_frac) * min(r_target, 3.0)  # cap runner R to 3R
+            realized_r = xconf.partial_frac * 1.0 + (1.0 - xconf.partial_frac) * min(
+                r_target, 3.0
+            )  # cap runner R to 3R
         elif result == "sl":
             realized_r = -1.0
         else:
             # timeout: if partial taken, hold remainder to exit_price
             if took_partial:
-                remainder_move = (exit_price - entry) / r_denom if side == "long" else (entry - exit_price) / r_denom
-                realized_r = xconf.partial_frac * 1.0 + (1.0 - xconf.partial_frac) * remainder_move
+                remainder_move = (
+                    (exit_price - entry) / r_denom
+                    if side == "long"
+                    else (entry - exit_price) / r_denom
+                )
+                realized_r = (
+                    xconf.partial_frac * 1.0
+                    + (1.0 - xconf.partial_frac) * remainder_move
+                )
             else:
-                remainder_move = (exit_price - entry) / r_denom if side == "long" else (entry - exit_price) / r_denom
+                remainder_move = (
+                    (exit_price - entry) / r_denom
+                    if side == "long"
+                    else (entry - exit_price) / r_denom
+                )
                 realized_r = remainder_move
 
         trades.append(
@@ -312,7 +372,11 @@ def evaluate(df: pd.DataFrame, econf: EntryConfig, xconf: ExitConfig) -> pd.Data
             }
         )
 
-    return pd.DataFrame(trades).set_index("timestamp") if trades else pd.DataFrame(columns=["timestamp"]).set_index("timestamp")
+    return (
+        pd.DataFrame(trades).set_index("timestamp")
+        if trades
+        else pd.DataFrame(columns=["timestamp"]).set_index("timestamp")
+    )
 
 
 # -------------------------
@@ -334,8 +398,8 @@ def run_backtest(
     partial_at_r: float = 1.0,
     partial_frac: float = 0.5,
     target: str = "swing",
-    tp_override: Optional[float] = None,   # decimal ratio, e.g. 0.0015
-    sl_override: Optional[float] = None,   # decimal ratio
+    tp_override: Optional[float] = None,  # decimal ratio, e.g. 0.0015
+    sl_override: Optional[float] = None,  # decimal ratio
     out: str = "reports/smc_ict_trades.csv",
 ) -> Dict[str, Any]:
     """
@@ -400,7 +464,9 @@ def run_backtest(
                 # If timestamp not found in synthetic df, skip recompute (shouldn't happen)
                 recomputed_rs.append(row.get("r", 0.0))
                 recomputed_results.append(row.get("result", "timeout"))
-                recomputed_exit_prices.append(row.get("tp") if row.get("result") == "tp" else row.get("sl"))
+                recomputed_exit_prices.append(
+                    row.get("tp") if row.get("result") == "tp" else row.get("sl")
+                )
                 continue
 
             entry = float(row["entry"])
@@ -431,28 +497,57 @@ def run_backtest(
             horizon = min(econf.forward_minutes, xconf.max_horizon_minutes)
 
             # Re-simulate path with overridden levels
-            result, bars, exit_price = simulate_path(df, start_idx, side, entry=entry, sl=sl_price, tp=tp_price, horizon=horizon)
+            result, bars, exit_price = simulate_path(
+                df,
+                start_idx,
+                side,
+                entry=entry,
+                sl=sl_price,
+                tp=tp_price,
+                horizon=horizon,
+            )
 
             # compute realized r similar to earlier evaluate logic
             r_denom = (entry - sl_price) if side == "long" else (sl_price - entry)
             if r_denom <= 0 or not np.isfinite(r_denom):
                 realized_r = 0.0
             else:
-                r_target = (tp_price - entry) / r_denom if side == "long" else (entry - tp_price) / r_denom
+                r_target = (
+                    (tp_price - entry) / r_denom
+                    if side == "long"
+                    else (entry - tp_price) / r_denom
+                )
                 # re-simulate one-R
                 one_r_price = entry + r_denom if side == "long" else entry - r_denom
-                r_hit_one, _, _ = simulate_path(df, start_idx, side, entry=entry, sl=sl_price, tp=one_r_price, horizon=horizon)
+                r_hit_one, _, _ = simulate_path(
+                    df,
+                    start_idx,
+                    side,
+                    entry=entry,
+                    sl=sl_price,
+                    tp=one_r_price,
+                    horizon=horizon,
+                )
                 took_partial = r_hit_one == "tp"
 
                 if result == "tp":
-                    realized_r = xconf.partial_frac * 1.0 + (1.0 - xconf.partial_frac) * min(r_target, 3.0)
+                    realized_r = xconf.partial_frac * 1.0 + (
+                        1.0 - xconf.partial_frac
+                    ) * min(r_target, 3.0)
                 elif result == "sl":
                     realized_r = -1.0
                 else:
                     # timeout
-                    remainder_move = (exit_price - entry) / r_denom if side == "long" else (entry - exit_price) / r_denom
+                    remainder_move = (
+                        (exit_price - entry) / r_denom
+                        if side == "long"
+                        else (entry - exit_price) / r_denom
+                    )
                     if took_partial:
-                        realized_r = xconf.partial_frac * 1.0 + (1.0 - xconf.partial_frac) * remainder_move
+                        realized_r = (
+                            xconf.partial_frac * 1.0
+                            + (1.0 - xconf.partial_frac) * remainder_move
+                        )
                     else:
                         realized_r = remainder_move
 
@@ -470,9 +565,17 @@ def run_backtest(
             side = trades_df.loc[ts, "side"]
             entry = float(trades_df.loc[ts, "entry"])
             if tp_override is not None:
-                trades_df.at[ts, "tp"] = float(entry * (1.0 + tp_override)) if side == "long" else float(entry * (1.0 - tp_override))
+                trades_df.at[ts, "tp"] = (
+                    float(entry * (1.0 + tp_override))
+                    if side == "long"
+                    else float(entry * (1.0 - tp_override))
+                )
             if sl_override is not None:
-                trades_df.at[ts, "sl"] = float(entry * (1.0 - sl_override)) if side == "long" else float(entry * (1.0 + sl_override))
+                trades_df.at[ts, "sl"] = (
+                    float(entry * (1.0 - sl_override))
+                    if side == "long"
+                    else float(entry * (1.0 + sl_override))
+                )
 
     # Compute metrics
     total_events = len(trades_df)
@@ -487,7 +590,9 @@ def run_backtest(
     initial_equity = 10000.0
     cum_r = trades_df["r"].fillna(0.0).cumsum()
     equity_curve = initial_equity * (1.0 + cum_r)
-    final_equity = float(equity_curve.iloc[-1]) if len(equity_curve) > 0 else initial_equity
+    final_equity = (
+        float(equity_curve.iloc[-1]) if len(equity_curve) > 0 else initial_equity
+    )
 
     # max drawdown percent
     peak = equity_curve.cummax()
@@ -525,30 +630,94 @@ def run_backtest(
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Evaluate SMC/ICT combined strategy with full entry/exit checklist.")
-    ap.add_argument("--n", type=int, default=5000, help="Number of synthetic minutes to generate.")
-    ap.add_argument("--seed", type=int, default=123, help="RNG seed for reproducibility.")
+    ap = argparse.ArgumentParser(
+        description="Evaluate SMC/ICT combined strategy with full entry/exit checklist."
+    )
+    ap.add_argument(
+        "--n", type=int, default=5000, help="Number of synthetic minutes to generate."
+    )
+    ap.add_argument(
+        "--seed", type=int, default=123, help="RNG seed for reproducibility."
+    )
     # Sweep detector settings
     ap.add_argument("--lookback", type=int, default=12, help="Sweep detector lookback.")
-    ap.add_argument("--wick-ratio", type=float, default=0.25, help="Sweep detector wick ratio.")
-    ap.add_argument("--vol-burst-z", type=float, default=1.2, help="Sweep detector volume burst Z.")
+    ap.add_argument(
+        "--wick-ratio", type=float, default=0.25, help="Sweep detector wick ratio."
+    )
+    ap.add_argument(
+        "--vol-burst-z", type=float, default=1.2, help="Sweep detector volume burst Z."
+    )
     # FVG settings
-    ap.add_argument("--fvg-min-gap", type=float, default=0.0, help="Minimum FVG gap size (price units).")
+    ap.add_argument(
+        "--fvg-min-gap",
+        type=float,
+        default=0.0,
+        help="Minimum FVG gap size (price units).",
+    )
     # Structure & context
-    ap.add_argument("--bos-lookback", type=int, default=10, help="Lookback for BOS/CHOCH swing calc.")
-    ap.add_argument("--pd-lookback", type=int, default=20, help="Lookback for premium/discount (swing mid).")
-    ap.add_argument("--htf-minutes", type=int, default=60, help="HTF bias window (minutes).")
-    ap.add_argument("--no-killzones", action="store_true", help="Disable killzone session filters.")
-    ap.add_argument("--sweep-window", type=int, default=10, help="Require sweep within last X minutes.")
-    ap.add_argument("--forward-minutes", type=int, default=60, help="Simulation horizon (minutes).")
+    ap.add_argument(
+        "--bos-lookback",
+        type=int,
+        default=10,
+        help="Lookback for BOS/CHOCH swing calc.",
+    )
+    ap.add_argument(
+        "--pd-lookback",
+        type=int,
+        default=20,
+        help="Lookback for premium/discount (swing mid).",
+    )
+    ap.add_argument(
+        "--htf-minutes", type=int, default=60, help="HTF bias window (minutes)."
+    )
+    ap.add_argument(
+        "--no-killzones", action="store_true", help="Disable killzone session filters."
+    )
+    ap.add_argument(
+        "--sweep-window",
+        type=int,
+        default=10,
+        help="Require sweep within last X minutes.",
+    )
+    ap.add_argument(
+        "--forward-minutes", type=int, default=60, help="Simulation horizon (minutes)."
+    )
     # Exit/management
-    ap.add_argument("--partial-at-r", type=float, default=1.0, help="Partial take-profit at R.")
-    ap.add_argument("--partial-frac", type=float, default=0.5, help="Fraction to close at partial TP.")
-    ap.add_argument("--target", type=str, default="swing", choices=["swing", "fvg_fill", "session"], help="Target preference (currently uses swing).")
-    ap.add_argument("--out", type=str, default="reports/smc_ict_trades.csv", help="Output CSV for trades.")
+    ap.add_argument(
+        "--partial-at-r", type=float, default=1.0, help="Partial take-profit at R."
+    )
+    ap.add_argument(
+        "--partial-frac",
+        type=float,
+        default=0.5,
+        help="Fraction to close at partial TP.",
+    )
+    ap.add_argument(
+        "--target",
+        type=str,
+        default="swing",
+        choices=["swing", "fvg_fill", "session"],
+        help="Target preference (currently uses swing).",
+    )
+    ap.add_argument(
+        "--out",
+        type=str,
+        default="reports/smc_ict_trades.csv",
+        help="Output CSV for trades.",
+    )
     # NEW flags for TP/SL override (decimal ratios)
-    ap.add_argument("--tp", type=float, default=None, help="(Optional) Override TP as decimal ratio relative to entry (e.g., 0.0015 for 0.15%).")
-    ap.add_argument("--sl", type=float, default=None, help="(Optional) Override SL as decimal ratio relative to entry (e.g., 0.0010 for 0.10%).")
+    ap.add_argument(
+        "--tp",
+        type=float,
+        default=None,
+        help="(Optional) Override TP as decimal ratio relative to entry (e.g., 0.0015 for 0.15%).",
+    )
+    ap.add_argument(
+        "--sl",
+        type=float,
+        default=None,
+        help="(Optional) Override SL as decimal ratio relative to entry (e.g., 0.0010 for 0.10%).",
+    )
     args = ap.parse_args()
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
@@ -588,18 +757,32 @@ def main():
     wins = results["wins"]
     losses = results["losses"]
     unresolved = results["unresolved"]
-    win_rate_pct = results["win_rate"] * 100 if not math.isnan(results["win_rate"]) else float("nan")
+    win_rate_pct = (
+        results["win_rate"] * 100
+        if not math.isnan(results["win_rate"])
+        else float("nan")
+    )
     expectancy = results["expectancy"]
     final_equity = results["final_equity"]
     max_dd = results["max_drawdown"]
     pf = results["profit_factor"]
 
-    print(f"events={events} usable={usable} wins={wins} losses={losses} unresolved={unresolved}")
+    print(
+        f"events={events} usable={usable} wins={wins} losses={losses} unresolved={unresolved}"
+    )
     tp_display = f"{args.tp:.4%}" if args.tp is not None else "auto"
     sl_display = f"{args.sl:.4%}" if args.sl is not None else "auto"
-    print(f"TP={tp_display} SL={sl_display} | win_rate={win_rate_pct:.2f}% expectancy={expectancy:.5f}")
-    pf_display = f"{pf:.2f}" if pf is not None and not math.isinf(pf) else ("inf" if pf is not None and math.isinf(pf) else "N/A")
-    print(f"final_equity={final_equity:.2f} max_drawdown={max_dd:.2f}% profit_factor={pf_display}")
+    print(
+        f"TP={tp_display} SL={sl_display} | win_rate={win_rate_pct:.2f}% expectancy={expectancy:.5f}"
+    )
+    pf_display = (
+        f"{pf:.2f}"
+        if pf is not None and not math.isinf(pf)
+        else ("inf" if pf is not None and math.isinf(pf) else "N/A")
+    )
+    print(
+        f"final_equity={final_equity:.2f} max_drawdown={max_dd:.2f}% profit_factor={pf_display}"
+    )
     print(f"Wrote trades CSV: {args.out}")
 
     # Optional: preview first trades

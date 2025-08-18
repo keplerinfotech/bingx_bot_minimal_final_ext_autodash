@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import os
 import argparse
-from typing import Dict, Any, List
+import os
+from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
@@ -22,7 +22,9 @@ def load_smc_params(settings_path: str | None = None) -> Dict[str, Any]:
     """
     defaults = {"sweep_lookback": 20, "wick_ratio": 0.5, "vol_burst_z": 1.5}
     if settings_path is None:
-        settings_path = os.environ.get("SMC_SETTINGS_PATH") or os.path.join("config", "settings.yaml")
+        settings_path = os.environ.get("SMC_SETTINGS_PATH") or os.path.join(
+            "config", "settings.yaml"
+        )
     if yaml is None:
         return defaults
     try:
@@ -31,7 +33,9 @@ def load_smc_params(settings_path: str | None = None) -> Dict[str, Any]:
                 cfg = yaml.safe_load(f) or {}
             smc = (cfg or {}).get("smc", {})
             return {
-                "sweep_lookback": int(smc.get("sweep_lookback", defaults["sweep_lookback"])),
+                "sweep_lookback": int(
+                    smc.get("sweep_lookback", defaults["sweep_lookback"])
+                ),
                 "wick_ratio": float(smc.get("wick_ratio", defaults["wick_ratio"])),
                 "vol_burst_z": float(smc.get("vol_burst_z", defaults["vol_burst_z"])),
             }
@@ -52,7 +56,10 @@ def synth_bars(n: int = 2000, seed: int = 11) -> pd.DataFrame:
     high = np.maximum(open_, close) + rng.uniform(0.01, 0.08, n)
     low = np.minimum(open_, close) - rng.uniform(0.01, 0.08, n)
     vol = np.exp(rng.normal(9.5, 0.25, n))
-    df = pd.DataFrame({"open": open_, "high": high, "low": low, "close": close, "volume": vol}, index=idx)
+    df = pd.DataFrame(
+        {"open": open_, "high": high, "low": low, "close": close, "volume": vol},
+        index=idx,
+    )
     return df
 
 
@@ -67,7 +74,10 @@ def derive_direction(df: pd.DataFrame) -> pd.Series:
 
 
 def score_events(
-    df: pd.DataFrame, events: pd.DataFrame, window: int = 10, move_threshold: float = 0.05
+    df: pd.DataFrame,
+    events: pd.DataFrame,
+    window: int = 10,
+    move_threshold: float = 0.05,
 ) -> pd.DataFrame:
     """
     Simple forward-return scoring:
@@ -100,23 +110,60 @@ def score_events(
             success = fut_max >= close_t + move_threshold
 
         rec = ev.to_dict()
-        rec.update({"direction": side, "close_t": close_t, "fut_max": fut_max, "fut_min": fut_min, "success": bool(success)})
+        rec.update(
+            {
+                "direction": side,
+                "close_t": close_t,
+                "fut_max": fut_max,
+                "fut_min": fut_min,
+                "success": bool(success),
+            }
+        )
         rows.append({"timestamp": ts, **rec})
     out = pd.DataFrame(rows).set_index("timestamp") if rows else events
     return out
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Check SMC sweep strategy signals and basic forward scoring.")
-    ap.add_argument("--n", type=int, default=2000, help="Number of synthetic minutes to generate.")
+    ap = argparse.ArgumentParser(
+        description="Check SMC sweep strategy signals and basic forward scoring."
+    )
+    ap.add_argument(
+        "--n", type=int, default=2000, help="Number of synthetic minutes to generate."
+    )
     ap.add_argument("--seed", type=int, default=11, help="Base RNG seed for bars.")
     ap.add_argument("--lookback", type=int, help="Sweep detector lookback override.")
-    ap.add_argument("--wick-ratio", type=float, help="Sweep detector wick ratio override.")
-    ap.add_argument("--vol-burst-z", type=float, help="Sweep detector volume burst Z-score override.")
-    ap.add_argument("--eval-window", type=int, default=10, help="Forward window (minutes) for success scoring.")
-    ap.add_argument("--move-threshold", type=float, default=0.05, help="Price move threshold for success scoring.")
-    ap.add_argument("--output-dir", type=str, default="reports", help="Where to write outputs (CSV).")
-    ap.add_argument("--save-csv", action="store_true", help="Save events with scoring to output-dir/strategy_events.csv")
+    ap.add_argument(
+        "--wick-ratio", type=float, help="Sweep detector wick ratio override."
+    )
+    ap.add_argument(
+        "--vol-burst-z",
+        type=float,
+        help="Sweep detector volume burst Z-score override.",
+    )
+    ap.add_argument(
+        "--eval-window",
+        type=int,
+        default=10,
+        help="Forward window (minutes) for success scoring.",
+    )
+    ap.add_argument(
+        "--move-threshold",
+        type=float,
+        default=0.05,
+        help="Price move threshold for success scoring.",
+    )
+    ap.add_argument(
+        "--output-dir",
+        type=str,
+        default="reports",
+        help="Where to write outputs (CSV).",
+    )
+    ap.add_argument(
+        "--save-csv",
+        action="store_true",
+        help="Save events with scoring to output-dir/strategy_events.csv",
+    )
     args = ap.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -141,20 +188,40 @@ def main():
 
     total = int(len(df))
     ev_n = int(len(events)) if events is not None else 0
-    print(f"Bars: {total} | Detected events: {ev_n} (lookback={smc['sweep_lookback']}, "
-          f"wick_ratio={smc['wick_ratio']}, vol_burst_z={smc['vol_burst_z']})")
+    print(
+        f"Bars: {total} | Detected events: {ev_n} (lookback={smc['sweep_lookback']}, "
+        f"wick_ratio={smc['wick_ratio']}, vol_burst_z={smc['vol_burst_z']})"
+    )
 
     if ev_n:
         # Direction distribution
-        dir_series = events["direction"] if "direction" in events.columns else derive_direction(df).loc[events.index]
-        dir_counts = pd.Series(dir_series).astype(str).str.lower().map(lambda s: "long" if s == "long" else "short").value_counts()
+        dir_series = (
+            events["direction"]
+            if "direction" in events.columns
+            else derive_direction(df).loc[events.index]
+        )
+        dir_counts = (
+            pd.Series(dir_series)
+            .astype(str)
+            .str.lower()
+            .map(lambda s: "long" if s == "long" else "short")
+            .value_counts()
+        )
         print("Direction counts:", dict(dir_counts))
 
         # Score events
-        scored = score_events(df, events, window=args.eval_window, move_threshold=args.move_threshold)
-        hitrate = float(scored["success"].mean()) if "success" in scored.columns and len(scored) else float("nan")
-        print(f"Success window={args.eval_window}m, threshold={args.move_threshold:.4f} | "
-              f"Hitrate: {hitrate:.2%} over {len(scored)} events")
+        scored = score_events(
+            df, events, window=args.eval_window, move_threshold=args.move_threshold
+        )
+        hitrate = (
+            float(scored["success"].mean())
+            if "success" in scored.columns and len(scored)
+            else float("nan")
+        )
+        print(
+            f"Success window={args.eval_window}m, threshold={args.move_threshold:.4f} | "
+            f"Hitrate: {hitrate:.2%} over {len(scored)} events"
+        )
 
         # Save CSV if requested
         if args.save_csv:
@@ -164,7 +231,9 @@ def main():
 
         # Preview
         print("Sample events:")
-        print(scored.head(10).to_string() if len(scored) else events.head(10).to_string())
+        print(
+            scored.head(10).to_string() if len(scored) else events.head(10).to_string()
+        )
     else:
         print("No events detected. Consider loosening thresholds or increasing n/seed.")
 

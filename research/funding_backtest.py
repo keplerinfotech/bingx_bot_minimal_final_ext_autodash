@@ -1,11 +1,14 @@
 import numpy as np
 import pandas as pd
 
-def funding_carry_backtest(funding_rate: pd.Series,
-                           threshold: float = 0.0,
-                           notional_usd: float = 10_000.0,
-                           taker_fee_bps: float = 1.0,
-                           interval_hours: int = 1) -> pd.DataFrame:
+
+def funding_carry_backtest(
+    funding_rate: pd.Series,
+    threshold: float = 0.0,
+    notional_usd: float = 10_000.0,
+    taker_fee_bps: float = 1.0,
+    interval_hours: int = 1,
+) -> pd.DataFrame:
     """
     Primitive backtest for a simple funding-carry strategy on perps:
       - Each interval, set position = -sign(funding_rate - threshold)
@@ -28,11 +31,20 @@ def funding_carry_backtest(funding_rate: pd.Series,
     # Fees when sign changes
     pos_shift = pd.Series(pos, index=fr.index).shift(1).fillna(0.0)
     flips = (np.sign(pos_shift) != np.sign(pos)).astype(int)
-    fee = - (taker_fee_bps / 10_000.0) * notional_usd * flips
+    fee = -(taker_fee_bps / 10_000.0) * notional_usd * flips
     funding_pnl = pos * notional_usd * fr  # assume per-interval rate
     pnl = funding_pnl + fee
     equity = pnl.cumsum()
-    return pd.DataFrame({"position": pos, "funding_pnl": funding_pnl, "fee": fee, "pnl": pnl, "equity": equity})
+    return pd.DataFrame(
+        {
+            "position": pos,
+            "funding_pnl": funding_pnl,
+            "fee": fee,
+            "pnl": pnl,
+            "equity": equity,
+        }
+    )
+
 
 def normalize_8h_to_hourly(funding_8h: pd.Series) -> pd.Series:
     """

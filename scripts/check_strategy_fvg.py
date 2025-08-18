@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import os
 import argparse
-from typing import Dict, Any, List
+import os
+from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
@@ -32,7 +32,10 @@ def synth_bars(n: int = 2000, seed: int = 11) -> pd.DataFrame:
     high = np.maximum(open_, close) + rng.uniform(0.01, 0.08, n)
     low = np.minimum(open_, close) - rng.uniform(0.01, 0.08, n)
     vol = np.exp(rng.normal(9.5, 0.25, n))
-    df = pd.DataFrame({"open": open_, "high": high, "low": low, "close": close, "volume": vol}, index=idx)
+    df = pd.DataFrame(
+        {"open": open_, "high": high, "low": low, "close": close, "volume": vol},
+        index=idx,
+    )
     return df
 
 
@@ -48,7 +51,10 @@ def derive_direction_from_bar(df: pd.DataFrame, ts: pd.Timestamp) -> str:
 
 
 def score_events_fvg(
-    df: pd.DataFrame, events: pd.DataFrame, window: int = 10, move_threshold: float = 0.05
+    df: pd.DataFrame,
+    events: pd.DataFrame,
+    window: int = 10,
+    move_threshold: float = 0.05,
 ) -> pd.DataFrame:
     """
     Score FVG events using a simple forward-move rule:
@@ -84,7 +90,15 @@ def score_events_fvg(
             success = fut_max >= close_t + move_threshold
 
         rec = ev.to_dict()
-        rec.update({"direction": side, "close_t": close_t, "fut_max": fut_max, "fut_min": fut_min, "success": bool(success)})
+        rec.update(
+            {
+                "direction": side,
+                "close_t": close_t,
+                "fut_max": fut_max,
+                "fut_min": fut_min,
+                "success": bool(success),
+            }
+        )
         rows.append({"timestamp": ts, **rec})
 
     out = pd.DataFrame(rows).set_index("timestamp") if rows else events
@@ -92,17 +106,42 @@ def score_events_fvg(
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Check FVG-based strategy signals and basic forward scoring.")
-    ap.add_argument("--n", type=int, default=2000, help="Number of synthetic minutes to generate.")
+    ap = argparse.ArgumentParser(
+        description="Check FVG-based strategy signals and basic forward scoring."
+    )
+    ap.add_argument(
+        "--n", type=int, default=2000, help="Number of synthetic minutes to generate."
+    )
     ap.add_argument("--seed", type=int, default=11, help="Base RNG seed for bars.")
-    ap.add_argument("--eval-window", type=int, default=10, help="Forward window (minutes) for success scoring.")
-    ap.add_argument("--move-threshold", type=float, default=0.05, help="Price move threshold for success scoring.")
-    ap.add_argument("--output-dir", type=str, default="reports", help="Where to write outputs (CSV).")
-    ap.add_argument("--save-csv", action="store_true", help="Save events with scoring to output-dir/strategy_events_fvg.csv")
+    ap.add_argument(
+        "--eval-window",
+        type=int,
+        default=10,
+        help="Forward window (minutes) for success scoring.",
+    )
+    ap.add_argument(
+        "--move-threshold",
+        type=float,
+        default=0.05,
+        help="Price move threshold for success scoring.",
+    )
+    ap.add_argument(
+        "--output-dir",
+        type=str,
+        default="reports",
+        help="Where to write outputs (CSV).",
+    )
+    ap.add_argument(
+        "--save-csv",
+        action="store_true",
+        help="Save events with scoring to output-dir/strategy_events_fvg.csv",
+    )
     args = ap.parse_args()
 
     if find_fvgs is None:
-        raise SystemExit("research.fvg.find_fvgs is not available. Please ensure the module is present.")
+        raise SystemExit(
+            "research.fvg.find_fvgs is not available. Please ensure the module is present."
+        )
 
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -123,14 +162,24 @@ def main():
     print(f"Bars: {len(df)} | FVG events: {ev_n}")
 
     if ev_n == 0:
-        print("No FVG events detected. Consider increasing n or adjusting detector defaults.")
+        print(
+            "No FVG events detected. Consider increasing n or adjusting detector defaults."
+        )
         return
 
     # Score
-    scored = score_events_fvg(df, events, window=args.eval_window, move_threshold=args.move_threshold)
-    hitrate = float(scored["success"].mean()) if "success" in scored.columns and len(scored) else float("nan")
-    print(f"Success window={args.eval_window}m, threshold={args.move_threshold:.4f} | "
-          f"Hitrate: {hitrate:.2%} over {len(scored)} events")
+    scored = score_events_fvg(
+        df, events, window=args.eval_window, move_threshold=args.move_threshold
+    )
+    hitrate = (
+        float(scored["success"].mean())
+        if "success" in scored.columns and len(scored)
+        else float("nan")
+    )
+    print(
+        f"Success window={args.eval_window}m, threshold={args.move_threshold:.4f} | "
+        f"Hitrate: {hitrate:.2%} over {len(scored)} events"
+    )
 
     # Save if requested
     if args.save_csv:

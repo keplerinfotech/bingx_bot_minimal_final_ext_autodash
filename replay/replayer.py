@@ -1,4 +1,5 @@
-import pandas as pd, numpy as np
+import pandas as pd
+
 
 class MarketReplay:
     """
@@ -8,6 +9,7 @@ class MarketReplay:
       - depth_df: (optional) top-of-book snapshots with columns ['timestamp','best_bid','bid_size','best_ask','ask_size'].
     The replayer yields ticks (trade events) and can be queried for prevailing top-of-book.
     """
+
     def __init__(self, trades_df: pd.DataFrame, depth_df: pd.DataFrame | None = None):
         self.trades = trades_df.sort_index()
         self.depth = depth_df.sort_index() if depth_df is not None else None
@@ -24,6 +26,7 @@ class MarketReplay:
                 return None
         return None
 
+
 class ExecutionSimulator:
     """
     Simulates limit and market orders' fills using trade flow and optional depth snapshots.
@@ -33,6 +36,7 @@ class ExecutionSimulator:
       - Market orders execute immediately against next trades until qty consumed.
     Returns fill dict with 'filled' flag, 'fill_price', 'filled_qty', and metadata including estimated queue_position.
     """
+
     def __init__(self, replay: MarketReplay):
         self.replay = replay
         self.resting_orders = []  # track our resting limit orders as dicts
@@ -50,11 +54,13 @@ class ExecutionSimulator:
             return float(tob.get("ask_size", 0.0))
 
     def place_order(self, order: dict):
-        otype = order.get("type","limit")
+        otype = order.get("type", "limit")
         ts = order.get("timestamp")
         side = order.get("side")
-        qty = float(order.get("qty",0.0))
-        price = float(order.get("price",0.0)) if order.get("price") is not None else None
+        qty = float(order.get("qty", 0.0))
+        price = (
+            float(order.get("price", 0.0)) if order.get("price") is not None else None
+        )
 
         if otype == "market":
             # consume trades from ts forward until qty filled
@@ -62,32 +68,48 @@ class ExecutionSimulator:
             fill_px = 0.0
             for _, tr in self.replay.trades.loc[ts:].iterrows():
                 trade_side = tr.get("side")
-                trade_size = float(tr.get("size",0.0))
-                trade_price = float(tr.get("price",0.0))
+                trade_size = float(tr.get("size", 0.0))
+                trade_price = float(tr.get("price", 0.0))
                 # market buy consumes asks (aggressor=buy)
                 if side == "long" and trade_side == "buy":
                     take = min(trade_size, qty - cum)
                     cum += take
-                    fill_px = trade_price if fill_px==0 else (fill_px*(cum-take) + trade_price*take)/cum
+                    fill_px = (
+                        trade_price
+                        if fill_px == 0
+                        else (fill_px * (cum - take) + trade_price * take) / cum
+                    )
                 if side == "short" and trade_side == "sell":
                     take = min(trade_size, qty - cum)
                     cum += take
-                    fill_px = trade_price if fill_px==0 else (fill_px*(cum-take) + trade_price*take)/cum
+                    fill_px = (
+                        trade_price
+                        if fill_px == 0
+                        else (fill_px * (cum - take) + trade_price * take) / cum
+                    )
                 if cum >= qty - 1e-12:
                     break
             filled = cum >= qty - 1e-12
-            return {"filled": filled, "fill_price": fill_px if filled else None, "filled_qty": cum, "order":order, "reason":"market"}
+            return {
+                "filled": filled,
+                "fill_price": fill_px if filled else None,
+                "filled_qty": cum,
+                "order": order,
+                "reason": "market",
+            }
 
         # limit order: check if at or inside TOB; estimate queue and check subsequent aggressor trades
-        queue_ahead = self._estimate_queue_ahead(ts, side="buy" if side=="long" else "sell", price=price)
+        queue_ahead = self._estimate_queue_ahead(
+            ts, side="buy" if side == "long" else "sell", price=price
+        )
         cum_agg = 0.0
         cum = 0.0
         fill_px = None
         # iterate trades and sum opposing aggressor volume at or through our limit price
         for _, tr in self.replay.trades.loc[ts:].iterrows():
             trade_side = tr.get("side")
-            trade_price = float(tr.get("price",0.0))
-            trade_size = float(tr.get("size",0.0))
+            trade_price = float(tr.get("price", 0.0))
+            trade_size = float(tr.get("size", 0.0))
             if side == "long":
                 # need sells (aggressor sold at bid) at price <= our price
                 if trade_side == "sell" and trade_price <= price + 1e-12:
@@ -101,5 +123,11 @@ class ExecutionSimulator:
                 cum = qty
                 break
         filled = cum >= qty - 1e-12
-        return {"filled": filled, "fill_price": fill_px, "filled_qty": cum, "order":order, "queue_ahead":queue_ahead, "agg_consumed":cum_agg}
-
+        return {
+            "filled": filled,
+            "fill_price": fill_px,
+            "filled_qty": cum,
+            "order": order,
+            "queue_ahead": queue_ahead,
+            "agg_consumed": cum_agg,
+        }

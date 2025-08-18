@@ -1,12 +1,14 @@
-import pandas as pd, numpy as np
-from collections import defaultdict, deque
 import bisect
+
+import pandas as pd
+
 
 class L2OrderBook:
     """
     Simple in-memory L2 orderbook representation using price->size maps for bids and asks.
     Maintains sorted price lists for quick top-of-book and queue-ahead calculations.
     """
+
     def __init__(self):
         # price levels stored as sorted lists (desc bids, asc asks)
         self.bids = {}  # price -> size
@@ -45,7 +47,12 @@ class L2OrderBook:
         best_ask = min(self.asks.keys()) if self.asks else None
         bid_size = self.bids.get(best_bid, 0.0) if best_bid is not None else 0.0
         ask_size = self.asks.get(best_ask, 0.0) if best_ask is not None else 0.0
-        return {"best_bid": best_bid, "bid_size": bid_size, "best_ask": best_ask, "ask_size": ask_size}
+        return {
+            "best_bid": best_bid,
+            "bid_size": bid_size,
+            "best_ask": best_ask,
+            "ask_size": ask_size,
+        }
 
     def queue_ahead(self, side: str, price: float):
         """
@@ -102,10 +109,15 @@ class L2Replay:
       - trades_df: DataFrame of trade prints with ['timestamp','price','size','side'] (aggressor side)
     The class will apply diffs in timestamp order to maintain an L2 orderbook and can feed trades.
     """
+
     def __init__(self, l2_diff_df: pd.DataFrame, trades_df: pd.DataFrame):
         # sort by timestamp
-        self.diffs = l2_diff_df.sort_index() if l2_diff_df is not None else pd.DataFrame()
-        self.trades = trades_df.sort_index() if trades_df is not None else pd.DataFrame()
+        self.diffs = (
+            l2_diff_df.sort_index() if l2_diff_df is not None else pd.DataFrame()
+        )
+        self.trades = (
+            trades_df.sort_index() if trades_df is not None else pd.DataFrame()
+        )
         self.book = L2OrderBook()
 
     def apply_diffs_up_to(self, ts):
@@ -117,11 +129,11 @@ class L2Replay:
             price = float(row.get("price"))
             size = float(row.get("size", 0.0))
             utype = row.get("update_type", "update")
-            if utype in ("snapshot","update"):
-                if side in ("bid","ask"):
+            if utype in ("snapshot", "update"):
+                if side in ("bid", "ask"):
                     self.book.set_level(side, price, size)
             elif utype == "delete":
-                if side in ("bid","ask"):
+                if side in ("bid", "ask"):
                     self.book.set_level(side, price, 0.0)
 
     def trades_since(self, ts):

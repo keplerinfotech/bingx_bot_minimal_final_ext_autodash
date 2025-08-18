@@ -1,35 +1,47 @@
-import subprocess
-import itertools
 import csv
-import os
+import itertools
 import logging
+import os
+import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     import matplotlib.pyplot as plt
+
     HAS_MPL = True
 except ImportError:
     HAS_MPL = False
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
+logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s] %(message)s")
 
 
 def run_backtest(tp, sl, params):
     """Run evaluate_smc_ict.py as subprocess and parse metrics."""
     cmd = [
-        "python", "scripts/evaluate_smc_ict.py",
-        "--tp", str(tp),
-        "--sl", str(sl),
-        "--seed", "123",
-        "--n", "2000",
+        "python",
+        "scripts/evaluate_smc_ict.py",
+        "--tp",
+        str(tp),
+        "--sl",
+        str(sl),
+        "--seed",
+        "123",
+        "--n",
+        "2000",
         "--no-killzones",
-        "--wick-ratio", str(params["wick_ratio"]),
-        "--fvg-min-gap", str(params["fvg_min_gap"]),
-        "--bos-lookback", str(params["bos_lookback"]),
-        "--pd-lookback", str(params["pd_lookback"]),
-        "--sweep-window", str(params["sweep_window"]),
-        "--forward-minutes", str(params["forward_minutes"]),
+        "--wick-ratio",
+        str(params["wick_ratio"]),
+        "--fvg-min-gap",
+        str(params["fvg_min_gap"]),
+        "--bos-lookback",
+        str(params["bos_lookback"]),
+        "--pd-lookback",
+        str(params["pd_lookback"]),
+        "--sweep-window",
+        str(params["sweep_window"]),
+        "--forward-minutes",
+        str(params["forward_minutes"]),
     ]
 
     logging.debug(f"Running: {' '.join(cmd)}")
@@ -83,7 +95,9 @@ def save_results(results, out_csv="batch_results.csv"):
 
     # Tabular preview
     from tabulate import tabulate
+
     print(tabulate(results, headers="keys", floatfmt=".4f"))
+
 
 def report_top_configs(results):
     """Print top-3 configs by expectancy and risk-adjusted."""
@@ -111,7 +125,9 @@ def report_top_configs(results):
             print(r)
 
     if valid_exp and all(r["expectancy"] < 0 for r in valid_exp):
-        logging.warning("All expectancy values < 0! Strategy unprofitable across configs.")
+        logging.warning(
+            "All expectancy values < 0! Strategy unprofitable across configs."
+        )
 
 
 def plot_heatmap(results):
@@ -154,23 +170,49 @@ def main():
     sl_values = [0.001, 0.0015, 0.002]
 
     param_grid = [
-        {"wick_ratio": 0.0, "fvg_min_gap": 0.0, "bos_lookback": 3, "pd_lookback": 5, "sweep_window": 15, "forward_minutes": 60},
-        {"wick_ratio": 0.15, "fvg_min_gap": 0.0, "bos_lookback": 6, "pd_lookback": 10, "sweep_window": 30, "forward_minutes": 60},
-        {"wick_ratio": 0.30, "fvg_min_gap": 0.02, "bos_lookback": 10, "pd_lookback": 20, "sweep_window": 60, "forward_minutes": 90},
+        {
+            "wick_ratio": 0.0,
+            "fvg_min_gap": 0.0,
+            "bos_lookback": 3,
+            "pd_lookback": 5,
+            "sweep_window": 15,
+            "forward_minutes": 60,
+        },
+        {
+            "wick_ratio": 0.15,
+            "fvg_min_gap": 0.0,
+            "bos_lookback": 6,
+            "pd_lookback": 10,
+            "sweep_window": 30,
+            "forward_minutes": 60,
+        },
+        {
+            "wick_ratio": 0.30,
+            "fvg_min_gap": 0.02,
+            "bos_lookback": 10,
+            "pd_lookback": 20,
+            "sweep_window": 60,
+            "forward_minutes": 90,
+        },
     ]
 
     combos = list(itertools.product(tp_values, sl_values, param_grid))
     results = []
 
     with ThreadPoolExecutor(max_workers=os.cpu_count()) as ex:
-        futures = {ex.submit(run_backtest, tp, sl, params): (tp, sl, params) for tp, sl, params in combos}
+        futures = {
+            ex.submit(run_backtest, tp, sl, params): (tp, sl, params)
+            for tp, sl, params in combos
+        }
         for fut in as_completed(futures):
             res = fut.result()
             results.append(res)
 
     if not results:
         logging.error("No results collected — inserting dummy entry.")
-        results.append({"tp": 0, "sl": 0, "expectancy": 0, "risk_adj": 0, "profit_factor": 0})
+        results.append(
+            {"tp": 0, "sl": 0, "expectancy": 0, "risk_adj": 0, "profit_factor": 0}
+        )
 
     save_results(results)
     report_top_configs(results)

@@ -1,0 +1,28 @@
+# Minimal live settings — do NOT commit API keys. This file is intended as a
+# starting point for a supervised live run. Fill in api_key/api_secret from a
+# secure source (env vars or a secrets manager) before running in production.
+binance:
+  api_key: ""  # INSERT LIVE KEY SECURELY
+  api_secret: ""  # INSERT LIVE SECRET SECURELY
+  testnet: false
+  paper_trade: false
+  simulate_orders: false
+
+logging:
+  file: logs/bingx_bot_live.log
+  level: INFO
+  console: true
+
+risk:
+  # Use very conservative default for initial runs: 50 bps = 0.50% default
+  max_daily_loss_bps: 50
+  cool_down_minutes: 120
+  fraction_of_kelly: 0.25
+
+# How long (seconds) without a heartbeat before considering the runner hung
+heartbeat_timeout_seconds: 300
+
+execution:
+  protection_ticks: 2
+  post_only: true
+  reduce_only: true

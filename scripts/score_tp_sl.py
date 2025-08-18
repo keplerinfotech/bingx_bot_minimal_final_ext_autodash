@@ -4,7 +4,6 @@ import argparse
 import os
 from typing import Tuple
 
-import numpy as np
 import pandas as pd
 
 
@@ -24,7 +23,9 @@ def load_events(path: str) -> pd.DataFrame:
     return df
 
 
-def score_tp_sl(df: pd.DataFrame, tp: float, sl: float) -> Tuple[int, int, int, int, float, pd.Series]:
+def score_tp_sl(
+    df: pd.DataFrame, tp: float, sl: float
+) -> Tuple[int, int, int, int, float, pd.Series]:
     """
     Score events with TP/SL using forward extremes.
     Returns: (total_events, usable, wins, losses, win_rate, returns_series)
@@ -43,8 +44,8 @@ def score_tp_sl(df: pd.DataFrame, tp: float, sl: float) -> Tuple[int, int, int, 
     hit = (L & (mx >= e * (1.0 + tp))) | (S & (mn <= e * (1.0 - tp)))
     stop = (L & (mn <= e * (1.0 - sl))) | (S & (mx >= e * (1.0 + sl)))
 
-    wins = (hit & ~stop)
-    losses = (stop & ~hit)
+    wins = hit & ~stop
+    losses = stop & ~hit
 
     n_wins = int(wins.sum())
     n_losses = int(losses.sum())
@@ -74,23 +75,62 @@ def equity_and_mdd(r: pd.Series, equity0: float) -> Tuple[pd.Series, float]:
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Baseline TP/SL scorer for strategy events.")
-    ap.add_argument("--events", type=str, default="reports/strategy_events.csv", help="Path to events CSV.")
-    ap.add_argument("--tp", type=float, default=0.0015, help="Take-profit as fractional return (default 0.0015 = 0.15%).")
-    ap.add_argument("--sl", type=float, default=0.0010, help="Stop-loss as fractional return (default 0.0010 = 0.10%).")
-    ap.add_argument("--equity0", type=float, default=10_000.0, help="Starting equity for equity curve.")
-    ap.add_argument("--out-eq", type=str, default="reports/eq_baseline.csv", help="Output CSV for equity curve.")
-    ap.add_argument("--no-save", action="store_true", help="Do not write equity curve CSV.")
-    ap.add_argument("--summary-only", action="store_true", help="Only print summary; do not compute equity/MDD.")
+    ap = argparse.ArgumentParser(
+        description="Baseline TP/SL scorer for strategy events."
+    )
+    ap.add_argument(
+        "--events",
+        type=str,
+        default="reports/strategy_events.csv",
+        help="Path to events CSV.",
+    )
+    ap.add_argument(
+        "--tp",
+        type=float,
+        default=0.0015,
+        help="Take-profit as fractional return (default 0.0015 = 0.15%).",
+    )
+    ap.add_argument(
+        "--sl",
+        type=float,
+        default=0.0010,
+        help="Stop-loss as fractional return (default 0.0010 = 0.10%).",
+    )
+    ap.add_argument(
+        "--equity0",
+        type=float,
+        default=10_000.0,
+        help="Starting equity for equity curve.",
+    )
+    ap.add_argument(
+        "--out-eq",
+        type=str,
+        default="reports/eq_baseline.csv",
+        help="Output CSV for equity curve.",
+    )
+    ap.add_argument(
+        "--no-save", action="store_true", help="Do not write equity curve CSV."
+    )
+    ap.add_argument(
+        "--summary-only",
+        action="store_true",
+        help="Only print summary; do not compute equity/MDD.",
+    )
     args = ap.parse_args()
 
     df = load_events(args.events)
-    total, usable, n_wins, n_losses, win_rate, r = score_tp_sl(df, tp=args.tp, sl=args.sl)
+    total, usable, n_wins, n_losses, win_rate, r = score_tp_sl(
+        df, tp=args.tp, sl=args.sl
+    )
     expectancy = float(r.mean()) if len(r) else float("nan")
     unresolved = total - usable
 
-    print(f"events={total} usable={usable} wins={n_wins} losses={n_losses} unresolved={unresolved}")
-    print(f"TP={args.tp:.4%} SL={args.sl:.4%} | win_rate={win_rate:.2%} expectancy={expectancy:.5f}")
+    print(
+        f"events={total} usable={usable} wins={n_wins} losses={n_losses} unresolved={unresolved}"
+    )
+    print(
+        f"TP={args.tp:.4%} SL={args.sl:.4%} | win_rate={win_rate:.2%} expectancy={expectancy:.5f}"
+    )
 
     if not args.summary_only:
         curve, mdd = equity_and_mdd(r, args.equity0)
@@ -98,7 +138,9 @@ def main():
         print(f"final_equity={final_eq:.2f} max_drawdown={mdd:.2%}")
         if not args.no_save:
             os.makedirs(os.path.dirname(args.out_eq), exist_ok=True)
-            pd.DataFrame({"equity": curve.reset_index(drop=True)}).to_csv(args.out_eq, index=False)
+            pd.DataFrame({"equity": curve.reset_index(drop=True)}).to_csv(
+                args.out_eq, index=False
+            )
             print(f"Wrote equity curve: {args.out_eq}")
 
 

@@ -1,5 +1,6 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
+
 
 def resample_ohlc(df: pd.DataFrame, rule: str) -> pd.DataFrame:
     o = df["open"].resample(rule).first()
@@ -7,8 +8,11 @@ def resample_ohlc(df: pd.DataFrame, rule: str) -> pd.DataFrame:
     l = df["low"].resample(rule).min()
     c = df["close"].resample(rule).last()
     v = df.get("volume", pd.Series(index=df.index, dtype=float)).resample(rule).sum()
-    out = pd.DataFrame({"open":o,"high":h,"low":l,"close":c,"volume":v}).dropna()
+    out = pd.DataFrame(
+        {"open": o, "high": h, "low": l, "close": c, "volume": v}
+    ).dropna()
     return out
+
 
 def anchored_vwap(df: pd.DataFrame, anchor_ts: pd.Timestamp | None = None) -> pd.Series:
     """
@@ -24,6 +28,7 @@ def anchored_vwap(df: pd.DataFrame, anchor_ts: pd.Timestamp | None = None) -> pd
     vwap = pv_cum / (vol_cum.replace(0, np.nan))
     return vwap.ffill()
 
+
 def donchian_state(df: pd.DataFrame, window: int = 20) -> pd.Series:
     hh = df["high"].rolling(window, min_periods=1).max()
     ll = df["low"].rolling(window, min_periods=1).min()
@@ -35,6 +40,7 @@ def donchian_state(df: pd.DataFrame, window: int = 20) -> pd.Series:
     state[up] = 1
     state[dn] = -1
     return state
+
 
 def htf_bias(ltf_df: pd.DataFrame, htf_rule="4H", method="combo") -> pd.Series:
     """

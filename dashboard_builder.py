@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+
 import pandas as pd
 
 try:
@@ -18,7 +19,15 @@ def build_dashboard(csv_path: str, out_html: str = "dashboard.html") -> str:
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
 
-    for col in ("filled", "filled_qty", "queue_ahead", "agg_consumed", "price", "qty", "route_prob"):
+    for col in (
+        "filled",
+        "filled_qty",
+        "queue_ahead",
+        "agg_consumed",
+        "price",
+        "qty",
+        "route_prob",
+    ):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
@@ -46,14 +55,24 @@ def build_dashboard(csv_path: str, out_html: str = "dashboard.html") -> str:
         return out_html
 
     figs = []
-    fig_filled = px.bar(summary, x="venue", y="filled_rate", title="Filled Rate by Venue", text="filled_rate")
+    fig_filled = px.bar(
+        summary,
+        x="venue",
+        y="filled_rate",
+        title="Filled Rate by Venue",
+        text="filled_rate",
+    )
     fig_filled.update_layout(yaxis_tickformat=".0%")
     figs.append(fig_filled)
 
-    fig_orders = px.bar(summary, x="venue", y="orders", title="Orders by Venue", text="orders")
+    fig_orders = px.bar(
+        summary, x="venue", y="orders", title="Orders by Venue", text="orders"
+    )
     figs.append(fig_orders)
 
-    fig_prob = px.bar(summary, x="venue", y="avg_route_prob", title="Avg Route Prob by Venue")
+    fig_prob = px.bar(
+        summary, x="venue", y="avg_route_prob", title="Avg Route Prob by Venue"
+    )
     figs.append(fig_prob)
 
     dfx = df.copy()
@@ -73,11 +92,15 @@ def build_dashboard(csv_path: str, out_html: str = "dashboard.html") -> str:
     from plotly.subplots import make_subplots
 
     rows = len(figs)
-    combined = make_subplots(rows=rows, cols=1, subplot_titles=[f.layout.title.text for f in figs])
+    combined = make_subplots(
+        rows=rows, cols=1, subplot_titles=[f.layout.title.text for f in figs]
+    )
     for i, f in enumerate(figs, start=1):
         for tr in f.data:
             combined.add_trace(tr, row=i, col=1)
-    combined.update_layout(height=350 * rows, showlegend=True, title_text="Final Fill Quality Report")
+    combined.update_layout(
+        height=350 * rows, showlegend=True, title_text="Final Fill Quality Report"
+    )
 
     combined.write_html(out_html, include_plotlyjs="cdn")
     return out_html

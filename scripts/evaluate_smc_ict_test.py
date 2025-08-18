@@ -12,6 +12,7 @@ Calculates:
 import argparse
 import random
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--tp", type=float, required=True)
@@ -24,8 +25,9 @@ def parse_args():
     parser.add_argument("--forward-minutes", type=int, default=60)
     parser.add_argument("--seed", type=int, default=123)
     parser.add_argument("--n", type=int, default=1000)
-    parser.add_argument("--no-killzones", action='store_true')
+    parser.add_argument("--no-killzones", action="store_true")
     return parser.parse_args()
+
 
 def main():
     args = parse_args()
@@ -57,10 +59,11 @@ def main():
         "trades": trades,
         "expectancy": expectancy,
         "profit_factor": profit_factor,
-        "max_dd": max_dd
+        "max_dd": max_dd,
     }
 
     print(result)
+
 
 if __name__ == "__main__":
     main()

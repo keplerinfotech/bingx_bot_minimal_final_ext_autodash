@@ -1,0 +1,82 @@
+# Conservative live trading_config for initial supervised run
+general:
+  risk_per_trade: 0.001           # 0.1% of account balance
+  max_daily_risk: 0.005          # 0.5% per day
+  max_open_trades: 1
+  use_kelly: false
+
+time_filters:
+  enabled: true
+  killzones:
+    london: ["02:00", "05:00"]
+    new_york_am: ["07:00", "10:00"]
+    new_york_pm: ["12:00", "14:00"]
+  avoid_friday_afternoon: true
+  avoid_low_liquidity: true
+
+market_structure:
+  lookback_candles: 50
+  bos_confirmation: 3
+  choch_required: true
+
+liquidity:
+  sweep_enabled: false
+  equal_highs_lows_tolerance: 0.05
+  liquidity_pool_lookback: 100
+  sweep_window: 15
+
+order_blocks:
+  refine_wicks: true
+  min_body_ratio: 0.3
+  htf_confirmation: true
+  htf_timeframes: ["1H", "4H"]
+
+fair_value_gaps:
+  enabled: true
+  min_gap_size: 0.0005
+  entry_offset: 0.5
+
+premium_discount:
+  enabled: true
+  fib_swing_lookback: 50
+  require_discount_for_longs: true
+  require_premium_for_shorts: true
+
+entry_rules:
+  require_liquidity_sweep: false
+  require_fvg: true
+  require_bos_or_choch: true
+  require_order_block: true
+  confluence_minimum: 3
+
+exit_rules:
+  stop_loss:
+    under_order_block: true
+    atr_filter: true
+    atr_multiplier: 1.5
+    sl: 0.001
+  take_profit:
+    target_liquidity: true
+    imbalance_fill: true
+    tp: 0.003
+    rr_minimum: 2.0
+  partials:
+    enabled: true
+    at_rr: [1.0, 2.0]
+    leave_runner: true
+  time_based_exit:
+    enabled: true
+    max_bars_hold: 20
+
+filters:
+  volatility:
+    min_atr: 0.0008
+    max_spread: 0.0002
+  news:
+    avoid_high_impact: true
+    lookahead_minutes: 30
+
+logging:
+  enabled: true
+  save_trades: true
+  report_path: "reports/trade_logs_live.csv"

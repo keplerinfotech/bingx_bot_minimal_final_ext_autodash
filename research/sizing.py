@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def kelly_fraction(p: float, b: float) -> float:
     """
     Kelly fraction for a Bernoulli bet with win prob p and payoff ratio b (avg_win/avg_loss).
@@ -10,13 +11,16 @@ def kelly_fraction(p: float, b: float) -> float:
     f = p - (1.0 - p) / b
     return max(0.0, f)
 
-def capped_kelly_size(equity: float,
-                      p: float,
-                      b: float,
-                      fraction_of_kelly: float = 0.25,
-                      vol_cap_frac: float | None = None,
-                      price: float | None = None,
-                      contract_value: float | None = None) -> dict:
+
+def capped_kelly_size(
+    equity: float,
+    p: float,
+    b: float,
+    fraction_of_kelly: float = 0.25,
+    vol_cap_frac: float | None = None,
+    price: float | None = None,
+    contract_value: float | None = None,
+) -> dict:
     """
     Returns dict with target notional and units, applying a cap (e.g., 1/4 Kelly).
     Optionally cap by volatility (not provided here; placeholder param).
@@ -31,7 +35,12 @@ def capped_kelly_size(equity: float,
     if contract_value is not None and price is None:
         # for inverse/futures where contract_value specifies USD value per contract
         units = target_notional / contract_value
-    return {"fraction": f, "target_notional": float(target_notional), "units": None if units is None else float(units)}
+    return {
+        "fraction": f,
+        "target_notional": float(target_notional),
+        "units": None if units is None else float(units),
+    }
+
 
 def kelly_from_returns(r: np.ndarray) -> float:
     """

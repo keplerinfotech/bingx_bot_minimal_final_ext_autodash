@@ -1,11 +1,14 @@
-import pandas as pd, numpy as np
+import pandas as pd
+
 from .l2_replayer import L2Replay
+
 
 class ExecutionSimulatorL2:
     """
     Execution simulator that is L2-aware. It uses L2Replay to maintain book state and resolve fills
     while providing queue-ahead and fill-quality scoring.
     """
+
     def __init__(self, l2_replay: L2Replay):
         self.replay = l2_replay
         self.fill_records = []
@@ -32,7 +35,9 @@ class ExecutionSimulatorL2:
         fill_px = None
         filled_qty = 0.0
         for _, tr in self.replay.trades_since(ts).iterrows():
-            trade_side = tr.get("side")  # 'buy' if aggressor bought at ask (consumes asks)
+            trade_side = tr.get(
+                "side"
+            )  # 'buy' if aggressor bought at ask (consumes asks)
             trade_price = float(tr.get("price"))
             trade_size = float(tr.get("size", 0.0))
             # Apply trade to book first (to reflect book changes)
@@ -50,8 +55,14 @@ class ExecutionSimulatorL2:
                 break
 
         # record
-        rec = {"order": order, "filled": filled, "fill_price": fill_px, "filled_qty": filled_qty,
-               "queue_ahead": queue_ahead, "agg_consumed": cum_agg}
+        rec = {
+            "order": order,
+            "filled": filled,
+            "fill_price": fill_px,
+            "filled_qty": filled_qty,
+            "queue_ahead": queue_ahead,
+            "agg_consumed": cum_agg,
+        }
         self.fill_records.append(rec)
         return rec
 
@@ -68,17 +79,30 @@ class ExecutionSimulatorL2:
             trade_size = float(tr.get("size", 0.0))
             if side == "long" and trade_side == "buy":
                 take = min(trade_size, qty - cum)
-                vwap = (vwap * cum + trade_price * take) / (cum + take) if cum + take > 0 else trade_price
+                vwap = (
+                    (vwap * cum + trade_price * take) / (cum + take)
+                    if cum + take > 0
+                    else trade_price
+                )
                 cum += take
             if side == "short" and trade_side == "sell":
                 take = min(trade_size, qty - cum)
-                vwap = (vwap * cum + trade_price * take) / (cum + take) if cum + take > 0 else trade_price
+                vwap = (
+                    (vwap * cum + trade_price * take) / (cum + take)
+                    if cum + take > 0
+                    else trade_price
+                )
                 cum += take
             self.replay.book.apply_trade(trade_side, trade_price, trade_size)
             if cum >= qty - 1e-12:
                 break
         filled = cum >= qty - 1e-12
-        rec = {"order": order, "filled": filled, "fill_price": vwap if filled else None, "filled_qty": cum}
+        rec = {
+            "order": order,
+            "filled": filled,
+            "fill_price": vwap if filled else None,
+            "filled_qty": cum,
+        }
         self.fill_records.append(rec)
         return rec
 
@@ -86,16 +110,18 @@ class ExecutionSimulatorL2:
         rows = []
         for r in self.fill_records:
             o = r.get("order", {})
-            rows.append({
-                "order_id": o.get("id"),
-                "ts": o.get("timestamp"),
-                "side": o.get("side"),
-                "price": o.get("price"),
-                "qty": o.get("qty"),
-                "filled": r.get("filled"),
-                "fill_price": r.get("fill_price"),
-                "filled_qty": r.get("filled_qty"),
-                "queue_ahead": r.get("queue_ahead"),
-                "agg_consumed": r.get("agg_consumed")
-            })
+            rows.append(
+                {
+                    "order_id": o.get("id"),
+                    "ts": o.get("timestamp"),
+                    "side": o.get("side"),
+                    "price": o.get("price"),
+                    "qty": o.get("qty"),
+                    "filled": r.get("filled"),
+                    "fill_price": r.get("fill_price"),
+                    "filled_qty": r.get("filled_qty"),
+                    "queue_ahead": r.get("queue_ahead"),
+                    "agg_consumed": r.get("agg_consumed"),
+                }
+            )
         return pd.DataFrame(rows)

@@ -1,17 +1,26 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
+
 from research.detectors import find_sweeps
 from research.fvg import find_fvgs, fvg_midpoints
 from research.htf import htf_bias
 from research.sizing import capped_kelly_size
 
-def backtest_smc_sweep(df: pd.DataFrame,
-                       equity_usd: float = 10_000.0,
-                       risk_per_trade_r: float = 1.0,
-                       rr_targets=(0.5, 1.0, 2.0),
-                       lookback=20, wick_ratio=0.5, vol_burst_z=1.5,
-                       htf_rule="4H", bias_method="combo",
-                       kelly_p=0.55, kelly_b=1.0, kelly_fraction=0.25) -> dict:
+
+def backtest_smc_sweep(
+    df: pd.DataFrame,
+    equity_usd: float = 10_000.0,
+    risk_per_trade_r: float = 1.0,
+    rr_targets=(0.5, 1.0, 2.0),
+    lookback=20,
+    wick_ratio=0.5,
+    vol_burst_z=1.5,
+    htf_rule="4H",
+    bias_method="combo",
+    kelly_p=0.55,
+    kelly_b=1.0,
+    kelly_fraction=0.25,
+) -> dict:
     """
     Simple event-driven backtest:
       - Detect sweeps on LTF data.
@@ -22,8 +31,14 @@ def backtest_smc_sweep(df: pd.DataFrame,
       - Exits: take-profit ladder at multiples of R; time-stop after N bars (optional: not implemented here).
     """
     df = df.copy()
-    assert {"open","high","low","close","volume"}.issubset(df.columns)
-    events = find_sweeps(df, lookback=lookback, wick_ratio=wick_ratio, vol_burst_z=vol_burst_z, require_reject=True)
+    assert {"open", "high", "low", "close", "volume"}.issubset(df.columns)
+    events = find_sweeps(
+        df,
+        lookback=lookback,
+        wick_ratio=wick_ratio,
+        vol_burst_z=vol_burst_z,
+        require_reject=True,
+    )
     if events.empty:
         return {"trades": pd.DataFrame(), "stats": {}}
 
@@ -40,12 +55,20 @@ def backtest_smc_sweep(df: pd.DataFrame,
             continue
         # choose entry midpoint
         if direction == "long":
-            entry = float(mids.loc[ts, "bull_mid"]) if not np.isnan(mids.loc[ts, "bull_mid"]) else float(df.loc[ts, "close"])
+            entry = (
+                float(mids.loc[ts, "bull_mid"])
+                if not np.isnan(mids.loc[ts, "bull_mid"])
+                else float(df.loc[ts, "close"])
+            )
             invalid = float(ev["invalidation"])  # lower than swing low
             if np.isnan(entry) or entry <= 0 or entry <= invalid:
                 continue
         else:
-            entry = float(mids.loc[ts, "bear_mid"]) if not np.isnan(mids.loc[ts, "bear_mid"]) else float(df.loc[ts, "close"])
+            entry = (
+                float(mids.loc[ts, "bear_mid"])
+                if not np.isnan(mids.loc[ts, "bear_mid"])
+                else float(df.loc[ts, "close"])
+            )
             invalid = float(ev["invalidation"])  # above swing high
             if np.isnan(entry) or entry <= 0 or entry >= invalid:
                 continue
@@ -58,7 +81,13 @@ def backtest_smc_sweep(df: pd.DataFrame,
             continue
 
         # Kelly-capped sizing
-        k = capped_kelly_size(equity_usd, p=kelly_p, b=kelly_b, fraction_of_kelly=kelly_fraction, price=entry)
+        k = capped_kelly_size(
+            equity_usd,
+            p=kelly_p,
+            b=kelly_b,
+            fraction_of_kelly=kelly_fraction,
+            price=entry,
+        )
         units = max(0.0, k["units"])
         if units <= 0:
             continue
@@ -68,7 +97,7 @@ def backtest_smc_sweep(df: pd.DataFrame,
         hit_tp = None
         exit_px = None
         rr_hit = None
-        for j in range(ix+1, len(df)):
+        for j in range(ix + 1, len(df)):
             hi = df["high"].iloc[j]
             lo = df["low"].iloc[j]
             if direction == "long":
@@ -104,21 +133,33 @@ def backtest_smc_sweep(df: pd.DataFrame,
         if exit_px is None:
             # timeout at last bar
             exit_px = float(df["close"].iloc[-1])
-            rr_hit = (exit_px - entry) / risk_per_unit if direction == "long" else (entry - exit_px) / risk_per_unit
+            rr_hit = (
+                (exit_px - entry) / risk_per_unit
+                if direction == "long"
+                else (entry - exit_px) / risk_per_unit
+            )
 
         pnl_per_unit = (exit_px - entry) if direction == "long" else (entry - exit_px)
         pnl = pnl_per_unit * units
-        trades.append({
-            "timestamp": ts, "dir": direction, "entry": entry, "stop": invalid,
-            "units": units, "exit": exit_px, "rr": rr_hit, "pnl": pnl
-        })
+        trades.append(
+            {
+                "timestamp": ts,
+                "dir": direction,
+                "entry": entry,
+                "stop": invalid,
+                "units": units,
+                "exit": exit_px,
+                "rr": rr_hit,
+                "pnl": pnl,
+            }
+        )
 
     trades_df = pd.DataFrame(trades).sort_values("timestamp")
     stats = {}
     if len(trades_df):
         stats = {
             "trades": int(len(trades_df)),
-            "hit_rate": float((trades_df["rr"]>0).mean()),
+            "hit_rate": float((trades_df["rr"] > 0).mean()),
             "avg_rr": float(trades_df["rr"].mean()),
             "sum_pnl": float(trades_df["pnl"].sum()),
             "median_rr": float(trades_df["rr"].median()),

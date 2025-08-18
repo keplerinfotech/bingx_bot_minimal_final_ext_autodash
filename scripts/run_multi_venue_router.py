@@ -11,20 +11,31 @@ CLI flags:
   --wick-ratio   Sweep detector wick ratio (overrides settings/env)
   --vol-burst-z  Sweep detector volume burst Z-score (overrides settings/env)
 """
+
 from __future__ import annotations
 
 import os
-import json
-from typing import Tuple, List, Dict, Any
+import threading
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
 
 # Project imports
-from multi_venue import Venue, Router, LatencyModel
-from replay.l2_replayer import L2Replay  # noqa: F401
+from multi_venue import LatencyModel, Router, Venue
 from replay.execution_l2 import ExecutionSimulatorL2  # noqa: F401
+from replay.l2_replayer import L2Replay  # noqa: F401
 from research.detectors import find_sweeps
+
+try:
+    # optional runtime telemetry helpers
+    from scripts.telemetry_client import write_heartbeat, write_pnl
+except Exception:
+    try:
+        from telemetry_client import write_heartbeat, write_pnl
+    except Exception:
+        write_heartbeat = None
+        write_pnl = None
 
 # Try to import a dashboard builder (prefer dashboard_builder, fall back to dashboard)
 build_dashboard = None
@@ -65,11 +76,31 @@ def synthesize_venue(
             ap = round(center + 0.01 * lvl, 2)
             bs = float(max(0.1, rng.exponential(10.0) * liquidity_scale))
             asz = float(max(0.1, rng.exponential(8.0) * liquidity_scale))
-            l2_rows.append({"timestamp": t, "side": "bid", "price": bp, "size": bs, "update_type": "snapshot"})
-            l2_rows.append({"timestamp": t, "side": "ask", "price": ap, "size": asz, "update_type": "snapshot"})
+            l2_rows.append(
+                {
+                    "timestamp": t,
+                    "side": "bid",
+                    "price": bp,
+                    "size": bs,
+                    "update_type": "snapshot",
+                }
+            )
+            l2_rows.append(
+                {
+                    "timestamp": t,
+                    "side": "ask",
+                    "price": ap,
+                    "size": asz,
+                    "update_type": "snapshot",
+                }
+            )
 
         # Aggressive prints
-        ntr = int(rng.integers(0, 4)) if liquidity_scale < 2.0 else int(rng.integers(1, 6))
+        ntr = (
+            int(rng.integers(0, 4))
+            if liquidity_scale < 2.0
+            else int(rng.integers(1, 6))
+        )
         for _ in range(ntr):
             side = "buy" if rng.random() < 0.5 else "sell"
             px = round(center + rng.normal(0, 0.02), 2)
@@ -79,7 +110,9 @@ def synthesize_venue(
     l2_df = pd.DataFrame(l2_rows).set_index("timestamp").sort_index()
     trades_df = pd.DataFrame(trades_rows).set_index("timestamp").sort_index()
 
-    return Venue(name=name, l2_diffs=l2_df, trades=trades_df), LatencyModel(base_ms=latency_base, jitter_ms=5.0)
+    return Venue(name=name, l2_diffs=l2_df, trades=trades_df), LatencyModel(
+        base_ms=latency_base, jitter_ms=5.0
+    )
 
 
 def run_final_replay(output_csv: str | None = None, output_dir: str = "reports") -> str:
@@ -96,7 +129,9 @@ def run_final_replay(output_csv: str | None = None, output_dir: str = "reports")
     # Helper: load sweep detector params from settings.yaml (env SMC_SETTINGS_PATH overrides)
     def _load_smc_params() -> Dict[str, Any]:
         defaults = {"sweep_lookback": 20, "wick_ratio": 0.5, "vol_burst_z": 1.5}
-        settings_path = os.environ.get("SMC_SETTINGS_PATH") or os.path.join("config", "settings.yaml")
+        settings_path = os.environ.get("SMC_SETTINGS_PATH") or os.path.join(
+            "config", "settings.yaml"
+        )
         cfg_vals = defaults.copy()
         if yaml is not None:
             try:
@@ -106,9 +141,15 @@ def run_final_replay(output_csv: str | None = None, output_dir: str = "reports")
                     smc = (cfg or {}).get("smc", {})
                     cfg_vals.update(
                         {
-                            "sweep_lookback": int(smc.get("sweep_lookback", cfg_vals["sweep_lookback"])),
-                            "wick_ratio": float(smc.get("wick_ratio", cfg_vals["wick_ratio"])),
-                            "vol_burst_z": float(smc.get("vol_burst_z", cfg_vals["vol_burst_z"])),
+                            "sweep_lookback": int(
+                                smc.get("sweep_lookback", cfg_vals["sweep_lookback"])
+                            ),
+                            "wick_ratio": float(
+                                smc.get("wick_ratio", cfg_vals["wick_ratio"])
+                            ),
+                            "vol_burst_z": float(
+                                smc.get("vol_burst_z", cfg_vals["vol_burst_z"])
+                            ),
                         }
                     )
             except Exception:
@@ -136,12 +177,39 @@ def run_final_replay(output_csv: str | None = None, output_dir: str = "reports")
         return cfg_vals
 
     # Create 3 venues and router
-    v1, lat1 = synthesize_venue("alpha", n=2000, seed=11, liquidity_scale=1.0, latency_base=20.0)
-    v2, lat2 = synthesize_venue("beta", n=2000, seed=22, liquidity_scale=2.5, latency_base=50.0)
-    v3, lat3 = synthesize_venue("gamma", n=2000, seed=33, liquidity_scale=0.6, latency_base=10.0)
+    v1, lat1 = synthesize_venue(
+        "alpha", n=2000, seed=11, liquidity_scale=1.0, latency_base=20.0
+    )
+    v2, lat2 = synthesize_venue(
+        "beta", n=2000, seed=22, liquidity_scale=2.5, latency_base=50.0
+    )
+    v3, lat3 = synthesize_venue(
+        "gamma", n=2000, seed=33, liquidity_scale=0.6, latency_base=10.0
+    )
     venues = [v1, v2, v3]
     latency_models = {"alpha": lat1, "beta": lat2, "gamma": lat3}
     router = Router(venues, latency_models=latency_models)
+
+    # Start a background heartbeat thread so supervised monitors can see the
+    # runner is alive. This is best-effort: telemetry helpers are optional.
+    hb_stop = threading.Event()
+
+    def _hb_loop():
+        while not hb_stop.is_set():
+            try:
+                if write_heartbeat:
+                    write_heartbeat()
+            except Exception:
+                pass
+            hb_stop.wait(10.0)
+
+    hb_thread = None
+    try:
+        if write_heartbeat:
+            hb_thread = threading.Thread(target=_hb_loop, daemon=True)
+            hb_thread.start()
+    except Exception:
+        hb_thread = None
 
     # Build LTF bar df used by sweep detector (use venue alpha price for bars)
     # Use '1min' to avoid deprecation
@@ -169,12 +237,22 @@ def run_final_replay(output_csv: str | None = None, output_dir: str = "reports")
     for ts, ev in events.iterrows():
         direction = ev.get("direction", "long")
         side = "long" if direction == "long" else "short"
-        price = float(ev.get("entry_price", df_bars.loc[ts, "close"])) if "entry_price" in ev else float(
-            df_bars.loc[ts, "close"]
+        price = (
+            float(ev.get("entry_price", df_bars.loc[ts, "close"]))
+            if "entry_price" in ev
+            else float(df_bars.loc[ts, "close"])
         )
         qty = float(ev.get("qty", 1.0))
         oid = f"e-{int(pd.Timestamp(ts).value // 1_000_000)}"  # stable ID in ms
-        orders.append({"id": oid, "timestamp": pd.Timestamp(ts), "side": side, "price": price, "qty": qty})
+        orders.append(
+            {
+                "id": oid,
+                "timestamp": pd.Timestamp(ts),
+                "side": side,
+                "price": price,
+                "qty": qty,
+            }
+        )
 
     # Route & place orders (use per-venue exec_sim to avoid unsupported constructor args)
     fill_records: List[Dict[str, Any]] = []
@@ -191,7 +269,13 @@ def run_final_replay(output_csv: str | None = None, output_dir: str = "reports")
         lat_ms = float(latency_models[venue_name].sample_ms())
         ts_submit = ts + pd.Timedelta(milliseconds=lat_ms)
 
-        order = {"id": o["id"], "timestamp": ts_submit, "side": side, "price": price, "qty": qty}
+        order = {
+            "id": o["id"],
+            "timestamp": ts_submit,
+            "side": side,
+            "price": price,
+            "qty": qty,
+        }
         res = venue.exec_sim.place_limit(order)
 
         rec = {
@@ -267,16 +351,48 @@ def run_final_replay(output_csv: str | None = None, output_dir: str = "reports")
 
     return out_csv
 
+    # finally: write PnL snapshot for monitors (best-effort)
+    try:
+        if write_pnl:
+            # naive realized PnL: sum(filled_qty * (fill_price - price) * side_sign)
+            realized = 0.0
+            for r in fill_records:
+                if (
+                    r.get("filled")
+                    and r.get("filled_qty")
+                    and r.get("fill_price") is not None
+                ):
+                    side = r.get("side", "long")
+                    sign = 1.0 if side == "long" else -1.0
+                    realized += (
+                        float(r.get("filled_qty", 0.0))
+                        * (float(r.get("fill_price", 0.0)) - float(r.get("price", 0.0)))
+                        * sign
+                    )
+            day_start_equity = float(os.environ.get("DAY_START_EQUITY", "10000"))
+            write_pnl(realized, day_start_equity)
+    except Exception:
+        pass
+
 
 if __name__ == "__main__":
     # CLI to override sweep params and output dir at runtime
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run final multi-venue L2 replay + router.")
-    parser.add_argument("--output-dir", type=str, default="reports", help="Directory for CSV and dashboard outputs.")
+    parser = argparse.ArgumentParser(
+        description="Run final multi-venue L2 replay + router."
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="reports",
+        help="Directory for CSV and dashboard outputs.",
+    )
     parser.add_argument("--lookback", type=int, help="Sweep detector lookback.")
     parser.add_argument("--wick-ratio", type=float, help="Sweep detector wick ratio.")
-    parser.add_argument("--vol-burst-z", type=float, help="Sweep detector volume burst Z-score.")
+    parser.add_argument(
+        "--vol-burst-z", type=float, help="Sweep detector volume burst Z-score."
+    )
     args = parser.parse_args()
 
     # Apply CLI overrides via environment variables checked by _load_smc_params()

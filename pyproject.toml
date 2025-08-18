@@ -1,9 +1,13 @@
 [tool.ruff]
 line-length = 88
 target-version = "py312"
-# Select a conservative set of rules; adjust as we tighten
-select = ["E", "F", "W", "C90"]
-extend-ignore = ["E203", "W503"]
+# Keep configuration minimal to avoid unknown rule selectors on older/newer ruff installs
+# Exclude heavy/legacy directories initially to allow incremental linting
+extend-exclude = ["replay/*", "research/*", "packaging/*"]
+
+[tool.ruff.lint]
+# Move deprecated top-level linter options here per ruff's warning
+extend-ignore = ["E203"]
 
 [tool.isort]
 profile = "black"

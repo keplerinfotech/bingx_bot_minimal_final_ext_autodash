@@ -19,17 +19,20 @@ folders_to_delete = [
     ".merge_conflicts",
 ]
 
+
 def delete_files(files):
     for file in files:
         if os.path.isfile(file):
             os.remove(file)
             print(f"Deleted file: {file}")
 
+
 def delete_folders(folders):
     for folder in folders:
         if os.path.isdir(folder):
             shutil.rmtree(folder)
             print(f"Deleted folder: {folder}")
+
 
 if __name__ == "__main__":
     delete_files(files_to_delete)

@@ -1,0 +1,16 @@
+[Unit]
+Description=Bingx Bot supervised runner
+After=network.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=%h/bingx_bot_minimal_final_ext_autodash
+ExecStart=/usr/bin/env python3 -u scripts/start_live.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:logs/bingx_bot_live_runner.log
+StandardError=append:logs/bingx_bot_live_runner.log
+
+[Install]
+WantedBy=multi-user.target

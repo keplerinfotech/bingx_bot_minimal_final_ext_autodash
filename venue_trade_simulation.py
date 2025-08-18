@@ -2,14 +2,41 @@
 from __future__ import annotations
 
 import os
-import pandas as pd
-import numpy as np
-from typing import Tuple, List, Dict, Any
+from typing import Any, Dict, List, Tuple
 
-from multi_venue import Venue, Router, LatencyModel
-from replay.l2_replayer import L2Replay  # noqa: F401
+import numpy as np
+import pandas as pd
+
+from multi_venue import LatencyModel, Router, Venue
 from replay.execution_l2 import ExecutionSimulatorL2  # noqa: F401
+from replay.l2_replayer import L2Replay  # noqa: F401
 from research.detectors import find_sweeps
+
+try:
+    # optional runtime telemetry helpers (best-effort)
+    from scripts.telemetry_client import write_heartbeat, write_pnl
+except Exception:
+    try:
+        from telemetry_client import write_heartbeat, write_pnl
+    except Exception:
+        write_heartbeat = None
+        write_pnl = None
+
+# Try to import a dashboard builder (prefer dashboard_builder, fall back to dashboard)
+build_dashboard = None
+try:
+    from dashboard_builder import build_dashboard  # type: ignore
+except Exception:
+    try:
+        from dashboard import build_dashboard  # type: ignore
+    except Exception:
+        build_dashboard = None
+
+# Optional YAML config loader for SMC sweep parameters
+try:
+    import yaml  # type: ignore
+except Exception:
+    yaml = None
 
 
 def synthesize_venue(
@@ -32,10 +59,30 @@ def synthesize_venue(
             ap = round(center + 0.01 * lvl, 2)
             bs = float(max(0.1, rng.exponential(10.0) * liquidity_scale))
             asz = float(max(0.1, rng.exponential(8.0) * liquidity_scale))
-            l2_rows.append({"timestamp": t, "side": "bid", "price": bp, "size": bs, "update_type": "snapshot"})
-            l2_rows.append({"timestamp": t, "side": "ask", "price": ap, "size": asz, "update_type": "snapshot"})
+            l2_rows.append(
+                {
+                    "timestamp": t,
+                    "side": "bid",
+                    "price": bp,
+                    "size": bs,
+                    "update_type": "snapshot",
+                }
+            )
+            l2_rows.append(
+                {
+                    "timestamp": t,
+                    "side": "ask",
+                    "price": ap,
+                    "size": asz,
+                    "update_type": "snapshot",
+                }
+            )
 
-        ntr = int(rng.integers(0, 4)) if liquidity_scale < 2.0 else int(rng.integers(1, 6))
+        ntr = (
+            int(rng.integers(0, 4))
+            if liquidity_scale < 2.0
+            else int(rng.integers(1, 6))
+        )
         for _ in range(ntr):
             side = "buy" if rng.random() < 0.5 else "sell"
             px = round(center + rng.normal(0, 0.02), 2)
@@ -45,16 +92,24 @@ def synthesize_venue(
     l2_df = pd.DataFrame(l2_rows).set_index("timestamp").sort_index()
     trades_df = pd.DataFrame(trades_rows).set_index("timestamp").sort_index()
 
-    return Venue(name=name, l2_diffs=l2_df, trades=trades_df), LatencyModel(base_ms=latency_base, jitter_ms=5.0)
+    return Venue(name=name, l2_diffs=l2_df, trades=trades_df), LatencyModel(
+        base_ms=latency_base, jitter_ms=5.0
+    )
 
 
 def run_final_replay(output_csv: str | None = None, output_dir: str = "reports") -> str:
     os.makedirs(output_dir, exist_ok=True)
     out_csv = output_csv or os.path.join(output_dir, "final_fill_quality_report.csv")
 
-    v1, lat1 = synthesize_venue("alpha", n=2000, seed=11, liquidity_scale=1.0, latency_base=20.0)
-    v2, lat2 = synthesize_venue("beta", n=2000, seed=22, liquidity_scale=2.5, latency_base=50.0)
-    v3, lat3 = synthesize_venue("gamma", n=2000, seed=33, liquidity_scale=0.6, latency_base=10.0)
+    v1, lat1 = synthesize_venue(
+        "alpha", n=2000, seed=11, liquidity_scale=1.0, latency_base=20.0
+    )
+    v2, lat2 = synthesize_venue(
+        "beta", n=2000, seed=22, liquidity_scale=2.5, latency_base=50.0
+    )
+    v3, lat3 = synthesize_venue(
+        "gamma", n=2000, seed=33, liquidity_scale=0.6, latency_base=10.0
+    )
     venues = [v1, v2, v3]
     latency_models = {"alpha": lat1, "beta": lat2, "gamma": lat3}
     router = Router(venues, latency_models=latency_models)
@@ -69,6 +124,56 @@ def run_final_replay(output_csv: str | None = None, output_dir: str = "reports")
     df["volume"] = 1.0
 
     # Detect sweep events (df is defined above)
+    # Local helper to load sweep detector params (settings.yaml or env overrides)
+    def _load_smc_params() -> Dict[str, Any]:
+        defaults = {"sweep_lookback": 20, "wick_ratio": 0.5, "vol_burst_z": 1.5}
+        settings_path = os.environ.get("SMC_SETTINGS_PATH") or os.path.join(
+            "config", "settings.yaml"
+        )
+        cfg_vals = defaults.copy()
+        if yaml is not None:
+            try:
+                if os.path.exists(settings_path):
+                    with open(settings_path, "r", encoding="utf-8") as f:
+                        cfg = yaml.safe_load(f) or {}
+                    smc = (cfg or {}).get("smc", {})
+                    cfg_vals.update(
+                        {
+                            "sweep_lookback": int(
+                                smc.get("sweep_lookback", cfg_vals["sweep_lookback"])
+                            ),
+                            "wick_ratio": float(
+                                smc.get("wick_ratio", cfg_vals["wick_ratio"])
+                            ),
+                            "vol_burst_z": float(
+                                smc.get("vol_burst_z", cfg_vals["vol_burst_z"])
+                            ),
+                        }
+                    )
+            except Exception:
+                # fall back to defaults if parsing fails
+                pass
+        # Env var overrides (set by CLI in __main__)
+        env_lookback = os.environ.get("SMC_SWEEP_LOOKBACK")
+        env_wick = os.environ.get("SMC_WICK_RATIO")
+        env_z = os.environ.get("SMC_VOL_BURST_Z")
+        if env_lookback:
+            try:
+                cfg_vals["sweep_lookback"] = int(env_lookback)
+            except Exception:
+                pass
+        if env_wick:
+            try:
+                cfg_vals["wick_ratio"] = float(env_wick)
+            except Exception:
+                pass
+        if env_z:
+            try:
+                cfg_vals["vol_burst_z"] = float(env_z)
+            except Exception:
+                pass
+        return cfg_vals
+
     smc_params = _load_smc_params()
     events = find_sweeps(
         df,
@@ -86,7 +191,15 @@ def run_final_replay(output_csv: str | None = None, output_dir: str = "reports")
         price = float(ev.get("entry_price", df.loc[ts, "close"]))
         qty = float(ev.get("qty", 1.0))
         oid = f"e-{int(pd.Timestamp(ts).value // 1_000_000)}"
-        orders.append({"id": oid, "timestamp": pd.Timestamp(ts), "side": side, "price": price, "qty": qty})
+        orders.append(
+            {
+                "id": oid,
+                "timestamp": pd.Timestamp(ts),
+                "side": side,
+                "price": price,
+                "qty": qty,
+            }
+        )
 
     # Route & place orders (use per-venue exec_sim to avoid unsupported constructor args)
     fill_records: List[Dict[str, Any]] = []
@@ -103,7 +216,13 @@ def run_final_replay(output_csv: str | None = None, output_dir: str = "reports")
         lat_ms = float(latency_models[venue_name].sample_ms())
         ts_submit = ts + pd.Timedelta(milliseconds=lat_ms)
 
-        order = {"id": o["id"], "timestamp": ts_submit, "side": side, "price": price, "qty": qty}
+        order = {
+            "id": o["id"],
+            "timestamp": ts_submit,
+            "side": side,
+            "price": price,
+            "qty": qty,
+        }
         res = venue.exec_sim.place_limit(order)
 
         rec = {
@@ -184,11 +303,20 @@ if __name__ == "__main__":
     # CLI to override sweep params and output dir at runtime
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run final multi-venue L2 replay + router.")
-    parser.add_argument("--output-dir", type=str, default="reports", help="Directory for CSV and dashboard outputs.")
+    parser = argparse.ArgumentParser(
+        description="Run final multi-venue L2 replay + router."
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="reports",
+        help="Directory for CSV and dashboard outputs.",
+    )
     parser.add_argument("--lookback", type=int, help="Sweep detector lookback.")
     parser.add_argument("--wick-ratio", type=float, help="Sweep detector wick ratio.")
-    parser.add_argument("--vol-burst-z", type=float, help="Sweep detector volume burst Z-score.")
+    parser.add_argument(
+        "--vol-burst-z", type=float, help="Sweep detector volume burst Z-score."
+    )
     args = parser.parse_args()
 
     # Apply CLI overrides via environment variables checked by _load_smc_params()

@@ -7,7 +7,15 @@ for ts, ev in events.iterrows():
     price = float(ev.get("entry_price", df.loc[ts, "close"]))
     qty = float(ev.get("qty", 1.0))
     oid = f"e-{int(pd.Timestamp(ts).value // 1_000_000)}"
-    orders.append({"id": oid, "timestamp": pd.Timestamp(ts), "side": side, "price": price, "qty": qty})
+    orders.append(
+        {
+            "id": oid,
+            "timestamp": pd.Timestamp(ts),
+            "side": side,
+            "price": price,
+            "qty": qty,
+        }
+    )
 
 # Route & place orders (use per-venue exec_sim to avoid unsupported constructor args)
 fill_records: List[Dict[str, Any]] = []
@@ -24,7 +32,13 @@ for o in orders:
     lat_ms = float(latency_models[venue_name].sample_ms())
     ts_submit = ts + pd.Timedelta(milliseconds=lat_ms)
 
-    order = {"id": o["id"], "timestamp": ts_submit, "side": side, "price": price, "qty": qty}
+    order = {
+        "id": o["id"],
+        "timestamp": ts_submit,
+        "side": side,
+        "price": price,
+        "qty": qty,
+    }
     res = venue.exec_sim.place_limit(order)
 
     rec = {
@@ -104,11 +118,20 @@ if __name__ == "__main__":
     # CLI to override sweep params and output dir at runtime
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run final multi-venue L2 replay + router.")
-    parser.add_argument("--output-dir", type=str, default="reports", help="Directory for CSV and dashboard outputs.")
+    parser = argparse.ArgumentParser(
+        description="Run final multi-venue L2 replay + router."
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="reports",
+        help="Directory for CSV and dashboard outputs.",
+    )
     parser.add_argument("--lookback", type=int, help="Sweep detector lookback.")
     parser.add_argument("--wick-ratio", type=float, help="Sweep detector wick ratio.")
-    parser.add_argument("--vol-burst-z", type=float, help="Sweep detector volume burst Z-score.")
+    parser.add_argument(
+        "--vol-burst-z", type=float, help="Sweep detector volume burst Z-score."
+    )
     args = parser.parse_args()
 
     # Apply CLI overrides via environment variables checked by _load_smc_params()
@@ -140,7 +163,15 @@ if __name__ == "__main__":
         price = float(ev.get("entry_price", df.loc[ts, "close"]))
         qty = float(ev.get("qty", 1.0))
         oid = f"e-{int(pd.Timestamp(ts).value // 1_000_000)}"
-        orders.append({"id": oid, "timestamp": pd.Timestamp(ts), "side": side, "price": price, "qty": qty})
+        orders.append(
+            {
+                "id": oid,
+                "timestamp": pd.Timestamp(ts),
+                "side": side,
+                "price": price,
+                "qty": qty,
+            }
+        )
 
     # Route & place orders (use per-venue exec_sim to avoid unsupported constructor args)
     fill_records: List[Dict[str, Any]] = []
@@ -157,7 +188,13 @@ if __name__ == "__main__":
         lat_ms = float(latency_models[venue_name].sample_ms())
         ts_submit = ts + pd.Timedelta(milliseconds=lat_ms)
 
-        order = {"id": o["id"], "timestamp": ts_submit, "side": side, "price": price, "qty": qty}
+        order = {
+            "id": o["id"],
+            "timestamp": ts_submit,
+            "side": side,
+            "price": price,
+            "qty": qty,
+        }
         res = venue.exec_sim.place_limit(order)
 
         rec = {
@@ -237,11 +274,20 @@ if __name__ == "__main__":
     # CLI to override sweep params and output dir at runtime
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run final multi-venue L2 replay + router.")
-    parser.add_argument("--output-dir", type=str, default="reports", help="Directory for CSV and dashboard outputs.")
+    parser = argparse.ArgumentParser(
+        description="Run final multi-venue L2 replay + router."
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="reports",
+        help="Directory for CSV and dashboard outputs.",
+    )
     parser.add_argument("--lookback", type=int, help="Sweep detector lookback.")
     parser.add_argument("--wick-ratio", type=float, help="Sweep detector wick ratio.")
-    parser.add_argument("--vol-burst-z", type=float, help="Sweep detector volume burst Z-score.")
+    parser.add_argument(
+        "--vol-burst-z", type=float, help="Sweep detector volume burst Z-score."
+    )
     args = parser.parse_args()
 
     # Apply CLI overrides via environment variables checked by _load_smc_params()

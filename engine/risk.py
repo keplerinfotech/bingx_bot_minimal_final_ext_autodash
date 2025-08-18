@@ -1,9 +1,11 @@
 from dataclasses import dataclass
 
+
 @dataclass
 class RiskParams:
     max_daily_loss_bps: float = 50.0
     cool_down_minutes: int = 120
+
 
 class RiskManager:
     def __init__(self, params: RiskParams):

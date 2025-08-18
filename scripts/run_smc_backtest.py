@@ -1,4 +1,6 @@
-import pandas as pd, numpy as np
+import numpy as np
+import pandas as pd
+
 from strategies.smc_sweep import backtest_smc_sweep
 
 # Create synthetic 1-min data with trending sections (to exercise HTF bias)
@@ -16,7 +18,9 @@ open_ = price + rng.normal(0, 0.02, n)
 close = price + rng.normal(0, 0.02, n)
 vol = np.exp(rng.normal(9.5, 0.25, n))
 
-df = pd.DataFrame({"open":open_, "high":high, "low":low, "close":close, "volume":vol}, index=idx)
+df = pd.DataFrame(
+    {"open": open_, "high": high, "low": low, "close": close, "volume": vol}, index=idx
+)
 
 # Inject some sweep-like spikes & volumes
 for j in [300, 550, 900, 1200, 1500, 1700]:
@@ -26,12 +30,19 @@ for j in [300, 550, 900, 1200, 1500, 1700]:
         df.iloc[j, df.columns.get_loc("low")] -= 1.2
     df.iloc[j, df.columns.get_loc("volume")] *= 6.0
 
-result = backtest_smc_sweep(df,
-                            equity_usd=10_000,
-                            rr_targets=(0.5,1.0,2.0),
-                            lookback=20, wick_ratio=0.5, vol_burst_z=1.25,
-                            htf_rule="4H", bias_method="combo",
-                            kelly_p=0.55, kelly_b=1.0, kelly_fraction=0.25)
+result = backtest_smc_sweep(
+    df,
+    equity_usd=10_000,
+    rr_targets=(0.5, 1.0, 2.0),
+    lookback=20,
+    wick_ratio=0.5,
+    vol_burst_z=1.25,
+    htf_rule="4H",
+    bias_method="combo",
+    kelly_p=0.55,
+    kelly_b=1.0,
+    kelly_fraction=0.25,
+)
 
 print("Stats:", result["stats"])
 print(result["trades"].head(10))
