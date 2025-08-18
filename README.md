@@ -113,3 +113,46 @@ python scripts/convert_recorder_multi.py
 3. Build dashboard:
 python scripts/dashboard.py
 View `dashboard.html` in your browser.
+
+## Supervised Live run (SAFE mode)
+
+This repository includes helper scripts to run the code in a supervised,
+conservative "live" mode. These are intentionally minimal and designed to be
+used by an operator who confirms keys and watches the process.
+
+1. Prepare conservative live configs:
+
+  - `config/settings.live.yaml` — conservative defaults (no API keys inside).
+  - `config/trading_config.live.yaml` — conservative trading params.
+
+2. Provide exchange API keys via environment variables (recommended):
+
+  - KuCoin: `KUCOIN_API_KEY`, `KUCOIN_API_SECRET`, `KUCOIN_API_PASSPHRASE`
+  - Binance: `BINANCE_API_KEY`, `BINANCE_API_SECRET`
+
+3. Start the telemetry service (optional but recommended):
+
+```bash
+python3 scripts/telemetry_service.py &
+```
+
+4. Start supervised live runner (interactive):
+
+```bash
+python3 scripts/start_live.py
+# confirm by typing YES when prompted
+```
+
+What the supervisor does:
+- Runs preflight checks against `config/*.live.yaml`.
+- Starts the runner and writes `.live_bot.pid` for the monitor to target.
+- Starts `kill_switch` in a background thread; kills the runner on drawdown or stale heartbeat and sends alerts.
+
+Notification environment variables (optional):
+
+- `SLACK_WEBHOOK_URL` — Slack incoming webhook used for alerts.
+- `ALERT_SMTP_HOST`, `ALERT_SMTP_PORT`, `ALERT_SMTP_USER`, `ALERT_SMTP_PASS`, `ALERT_TO` — SMTP settings for email alerts.
+
+Use this flow for supervised initial live testing. For production, use a proper service supervisor and secure secrets storage.
+
+CI Status: ![CI](https://github.com/keplerinfotech/bingx_bot_minimal_final_ext_autodash/actions/workflows/ci.yml/badge.svg)

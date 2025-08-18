@@ -1,0 +1,10 @@
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+# Select a conservative set of rules; adjust as we tighten
+select = ["E", "F", "W", "C90"]
+extend-ignore = ["E203", "W503"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
