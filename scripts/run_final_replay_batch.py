@@ -39,7 +39,7 @@ def _ensure_project_root_on_path() -> None:
 
 _ensure_project_root_on_path()
 
-import pandas as pd
+import pandas as pd  # noqa: E402
 
 
 def run_batch(
@@ -61,8 +61,18 @@ def run_batch(
     os.makedirs(output_dir, exist_ok=True)
     summary_rows = []
 
-    # Import replay module and capture original detector
-    replay_mod = importlib.import_module("scripts.run_final_replay")
+    # Import replay module and capture original detector. Wrap import so failures
+    # (missing runtime deps or PYTHONPATH issues) produce a clear, actionable
+    # error for users running this script directly.
+    try:
+        replay_mod = importlib.import_module("scripts.run_final_replay")
+    except Exception as exc:  # pragma: no cover - helpful runtime message
+        raise RuntimeError(
+            f"Failed to import scripts.run_final_replay: {exc!s}. "
+            "Ensure you run this from the project root (PYTHONPATH=.) and that "
+            "runtime dependencies are installed (pip install -r requirements.txt)"
+        )
+
     original_find = getattr(replay_mod, "find_sweeps", None)
 
     if original_find is None:
